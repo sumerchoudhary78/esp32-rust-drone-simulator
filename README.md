@@ -259,6 +259,6 @@ Official references used for the host and future platform adapters:
 
 ## License
 
-Project source is [MIT licensed](LICENSE). Third-party dependencies keep their
-own licenses; Three.js's license is vendored with its source. Review Slint's
-separate licensing options before redistributing native controller binaries.
+Project source is [MIT licensed](LICENSE). Dependencies keep their own licenses;
+see [third-party notices](THIRD_PARTY_NOTICES.md), including Three.js and the
+optional native controller's Slint dependency.
