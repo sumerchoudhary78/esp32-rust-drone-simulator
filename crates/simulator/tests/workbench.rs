@@ -6,6 +6,19 @@ use drone_sim::{
 };
 use flight_core::{commands::Command, safety::FlightState};
 
+#[test]
+fn guest_sensor_input_is_not_preclipped_to_builtin_controller_ranges() {
+    let mut p = drone_sim::physics::Plant::default();
+    p.rates = flight_core::math::Vec3::new(0., 0., 20.);
+    p.acceleration = flight_core::math::Vec3::new(0., 0., 5. * flight_core::imu::G);
+    let raw = p.sensor_sample();
+    assert!(raw.gyro.z > 19.9);
+    assert!(raw.accel.z > 5.9 * flight_core::imu::G);
+    let builtin = p.imu();
+    assert!(builtin.gyro.z < 4.4);
+    assert!(builtin.accel.z < 2.01 * flight_core::imu::G);
+}
+
 fn disconnect(c: &mut Circuit, device: &str, pin: &str) {
     c.wires.retain(|w| {
         ![&w.from, &w.to]

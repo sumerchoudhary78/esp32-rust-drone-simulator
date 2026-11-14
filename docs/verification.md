@@ -52,9 +52,9 @@ the initial SITL/Android checks above. Current local results:
 
 | Check                                               | Result                                                                                                                                                                                                     |
 | --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Root Rust workspace                                 | 31 passed: 9 flight-core, 13 scenarios, 9 circuit/upload/PWM checks                                                                                                                                        |
+| Root Rust workspace                                 | 32 passed: 9 flight-core, 13 scenarios, 10 circuit/upload/PWM/sensor checks                                                                                                                                |
 | Boot-only firmware host behavior                    | 3 passed; exact board and inhibited output requests                                                                                                                                                        |
-| Compiled image / CPU checks                         | 6 passed: merged-image integrity/corruption tests plus actual guest UART, GPIO, MPU6050, ADC and LEDC execution                                                                                            |
+| Compiled image / CPU checks                         | 7 passed: merged-image integrity/corruption tests plus actual guest UART, GPIO, MPU6050, ADC and LEDC execution                                                                                            |
 | Live HTTP/WebSocket                                 | 7 passed, including read-only net validation and upload/origin rejection                                                                                                                                   |
 | Browser                                             | 11 passed; complete flight flow plus assemble/wire 13 parts from empty, drag/zoom, reject shorts, reconnect sensor, export, upload ELF → CPU → PWM → motor model, emergency stop and host-heartbeat expiry |
 | Formatting, warnings-denied Clippy, optimized build | Passed                                                                                                                                                                                                     |
@@ -63,7 +63,10 @@ the initial SITL/Android checks above. Current local results:
 The guest firmware returned `WHO_AM_I=0x68`, stationary `az_raw=16384`, the
 requested ADC values `3300` then `1234`, and all four routed LEDC pulses near
 1000/1500 µs after UART commands. Wrong SDA, wrong I²C address and sensor absence
-returned errors without new samples. The boot-only image produced repeated
+returned errors without new samples. A range regression verifies that 6 g /
+20 rad/s inputs saturate at the default range, then read as `12288` / `18793`
+after the guest selects ±16 g / ±2000°/s. Guest input is quantized only by its
+selected device range, not clipped by the built-in controller's fixed decoder. The boot-only image produced repeated
 heartbeats with the emulated GPIO outputs LOW and no motor PWM peripheral output.
 Guest ROM/second-stage bootloader execution is not included: the loader enters
 the application and models its clock/revision handoff.

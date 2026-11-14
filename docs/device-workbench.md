@@ -101,7 +101,7 @@ python3 scripts/esp32_firmware.py build-fixture
 Upload `output/firmware/simulation-fixture/aerolab-sim-fixture.elf`. It uses
 esp-hal's actual I²C, LEDC and ADC drivers: WHO_AM_I must be `0x68`, a stationary
 accelerometer Z sample is near `16384`, and the battery ADC changes with voltage.
-UART `0`, `5`, `7` select 1000, 1500, 1700 µs for all four motors. The buttons
+UART `0`, `5`, `7` select 1000, 1500, 1700 µs for all four motors. UART `r` selects ±16 g / ±2000°/s for range experiments. The buttons
 below the console send these bytes. **This fixture intentionally has no flight
 arming/stabilization; it is for simulation only.** It is separate from the
 motor-inhibited milestone-1 boot firmware, and the flash helper cannot select it.

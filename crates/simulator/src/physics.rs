@@ -40,9 +40,8 @@ impl Plant {
         self.rng ^= self.rng << 17;
         ((self.rng >> 40) as f32 / (1u32 << 24) as f32) * 2. - 1.
     }
-    /// Generates specific force and biased/noisy gyro data, then quantizes them
-    /// through the actual MPU6050 register format and shared decoder.
-    pub fn imu(&mut self) -> ImuSample {
+    /// Physical sensor input before a device's selected range quantizes it.
+    pub fn sensor_sample(&mut self) -> ImuSample {
         let specific = self
             .orientation
             .conjugate()
@@ -51,6 +50,17 @@ impl Plant {
         let gyro = self.rates
             + Vec3::new(0.008, -0.006, 0.004)
             + Vec3::new(self.noise(), self.noise(), self.noise()) * 0.002;
+        ImuSample {
+            accel,
+            gyro,
+            temperature_c: 32.,
+        }
+    }
+    /// Built-in controller uses the fixed ±2 g / ±250 dps register decoder.
+    pub fn imu(&mut self) -> ImuSample {
+        let sample = self.sensor_sample();
+        let accel = sample.accel;
+        let gyro = sample.gyro;
         let mut raw = [0u8; 14];
         let gyro_scale = 131. * 180. / std::f32::consts::PI;
         for (i, value) in [

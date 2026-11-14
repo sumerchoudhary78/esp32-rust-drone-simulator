@@ -75,6 +75,10 @@ fn main() -> ! {
                     b'0' => pulse = 1000,
                     b'5' => pulse = 1500,
                     b'7' => pulse = 1700,
+                    b'r' => {
+                        let _ = i2c.write(0x68, &[0x1b, 0x18]);
+                        let _ = i2c.write(0x68, &[0x1c, 0x18]);
+                    }
                     _ => {}
                 }
             }

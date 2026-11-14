@@ -19,10 +19,10 @@ class Bridge:
         self.selector.register(self.process.stdout, selectors.EVENT_READ)
         self.console = ""
 
-    def step(self, steps=1, uart="", powered=1, adc=3300, gyro=.25):
+    def step(self, steps=1, uart="", powered=1, adc=3300, gyro=.25, az=9.80665):
         for i in range(steps):
             encoded = uart.encode().hex() if uart and i == 0 else "-"
-            self.process.stdin.write(f"2000 0 0 9.80665 0 0 {gyro} {adc} {powered} {encoded}\n")
+            self.process.stdin.write(f"2000 0 0 {az} 0 0 {gyro} {adc} {powered} {encoded}\n")
             self.process.stdin.flush()
             if not self.selector.select(timeout=5):
                 raise AssertionError("Guest backend failed to produce a bounded response")
@@ -44,6 +44,12 @@ class Bridge:
         self.selector.close()
 
 class GuestTests(unittest.TestCase):
+    def test_guest_selected_large_imu_ranges_use_unclipped_physical_input(self):
+        with Bridge() as cpu:
+            cpu.step(20,gyro=20,az=6*9.80665)
+            self.assertIn("az_raw=32767 gz_raw=32767",cpu.console)
+            cpu.step(130,uart="r\n",gyro=20,az=6*9.80665)
+            self.assertIn("az_raw=12288 gz_raw=18793",cpu.console)
     def test_boot_only_binary_keeps_motor_peripherals_off_and_clock_runs(self):
         with Bridge(BOOT) as cpu:
             frame = cpu.step(530)

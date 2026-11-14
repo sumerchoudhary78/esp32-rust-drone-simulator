@@ -238,6 +238,9 @@ function syncSetting(id, value) {
 }
 function render(t) {
   const guest = t.workbench?.driver === "firmware";
+  $("attitude-source").textContent = guest
+    ? "Simulation truth · guest estimator is not exported"
+    : "Estimated orientation · MPU6050 fusion";
   number("altitude", t.position_m.z, 2);
   number("battery", t.battery_voltage, 2);
   $("battery-pct").textContent = `${Math.round(t.battery_percent)}%`;

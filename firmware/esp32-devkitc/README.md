@@ -92,7 +92,7 @@ python3 scripts/esp32_firmware.py build-fixture
 
 `output/firmware/simulation-fixture/aerolab-sim-fixture.elf` uses actual HAL I²C,
 ADC and LEDC register accesses against the virtual devices. UART `0/5/7` selects
-1000/1500/1700 µs for all motors. It intentionally has no flight controller,
+1000/1500/1700 µs for all motors. UART `r` selects ±16 g / ±2000°/s for range experiments. It intentionally has no flight controller,
 arming gate or flight failsafe. It is never selected by the flash helper.
 
 ## Next milestone

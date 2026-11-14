@@ -676,7 +676,7 @@ impl World {
     }
     fn step_firmware(&mut self) {
         let imu = if self.firmware.as_ref().is_some_and(|f| f.needs_sample()) {
-            self.plant.imu()
+            self.plant.sensor_sample()
         } else {
             self.last_imu
         };
