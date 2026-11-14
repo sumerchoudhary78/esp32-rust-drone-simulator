@@ -1,0 +1,43 @@
+[package]
+name = "aerolab-controller"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/sumerchoudhary78/esp32-rust-drone-simulator"
+description = "Rust and Slint desktop/Android controller for the Aerolab ESP32 drone simulator"
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "aerolab-controller"
+path = "src/main.rs"
+
+[dependencies]
+serde_json = "1"
+tungstenite = "0.29"
+
+[target.'cfg(not(target_os = "android"))'.dependencies]
+slint = { version = "=1.18.1", default-features = false, features = ["std", "backend-winit", "renderer-software", "compat-1-2"] }
+
+[target.'cfg(target_os = "android")'.dependencies]
+slint = { version = "=1.18.1", default-features = false, features = ["std", "backend-android-activity-06", "renderer-software", "compat-1-2"] }
+
+[package.metadata.android]
+package = "dev.aerolab.controller"
+apk_name = "Aerolab-Controller"
+build_targets = ["aarch64-linux-android"]
+assets = "assets"
+
+[package.metadata.android.sdk]
+min_sdk_version = 26
+target_sdk_version = 35
+
+[package.metadata.android.application]
+label = "Aerolab Controller"
+uses_cleartext_traffic = true
+
+[[package.metadata.android.uses_permission]]
+name = "android.permission.INTERNET"

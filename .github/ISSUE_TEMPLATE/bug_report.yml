@@ -1,0 +1,30 @@
+name: Bug report
+description: Report a reproducible simulator or controller problem.
+labels: [bug]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Include what you expected and what you observed.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+      description: Include commands, pilot inputs, settings and faults needed to reproduce it.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Commit/version, OS, Rust/Node version, browser/device, and native controller if applicable.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Logs, CSV or screenshots
+      description: Remove credentials, private addresses and personal data before attaching evidence.

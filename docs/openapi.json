@@ -1,0 +1,153 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Aerolab local simulator",
+    "version": "0.1.0",
+    "description": "Software-in-the-loop. WebSocket contract: docs/protocol.md."
+  },
+  "servers": [{ "url": "http://127.0.0.1:8787" }],
+  "paths": {
+    "/api/health": {
+      "get": {
+        "operationId": "health",
+        "responses": {
+          "200": {
+            "description": "Flight task publishing fresh snapshots",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Health" }
+              }
+            }
+          },
+          "503": { "description": "Flight snapshot is stale" }
+        }
+      }
+    },
+    "/api/telemetry": {
+      "get": {
+        "operationId": "telemetry",
+        "responses": {
+          "200": {
+            "description": "Latest 25 Hz snapshot",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Telemetry" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/config": {
+      "get": {
+        "operationId": "config",
+        "responses": {
+          "200": {
+            "description": "Plant parameters, motor map and model limitations",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "protocol_version",
+                    "mode",
+                    "command_timeout_ms",
+                    "motors",
+                    "limitations"
+                  ],
+                  "properties": {
+                    "protocol_version": { "const": 1 },
+                    "mode": { "const": "simulation" },
+                    "command_timeout_ms": { "const": 500 },
+                    "motors": {
+                      "type": "array",
+                      "minItems": 4,
+                      "maxItems": 4,
+                      "items": { "type": "object" }
+                    },
+                    "limitations": {
+                      "type": "array",
+                      "items": { "type": "string" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Health": {
+        "type": "object",
+        "required": [
+          "service",
+          "mode",
+          "healthy",
+          "snapshot_age_ms",
+          "nominal_loop_hz",
+          "version"
+        ],
+        "properties": {
+          "service": { "const": "aerolab" },
+          "mode": { "const": "simulation" },
+          "healthy": { "type": "boolean" },
+          "snapshot_age_ms": { "type": "integer", "minimum": 0 },
+          "nominal_loop_hz": { "const": 500 },
+          "version": { "type": "string" }
+        }
+      },
+      "Vec3": {
+        "type": "object",
+        "required": ["x", "y", "z"],
+        "properties": {
+          "x": { "type": "number" },
+          "y": { "type": "number" },
+          "z": { "type": "number" }
+        }
+      },
+      "Telemetry": {
+        "type": "object",
+        "required": [
+          "type",
+          "state",
+          "tick",
+          "motors",
+          "settings",
+          "faults",
+          "position_m",
+          "attitude_deg"
+        ],
+        "properties": {
+          "type": { "const": "telemetry" },
+          "state": { "enum": ["calibrating", "disarmed", "armed", "failsafe"] },
+          "tick": { "type": "integer", "minimum": 0 },
+          "position_m": { "$ref": "#/components/schemas/Vec3" },
+          "attitude_deg": { "$ref": "#/components/schemas/Vec3" },
+          "settings": { "type": "object" },
+          "faults": { "type": "object" },
+          "motors": {
+            "type": "object",
+            "required": ["normalized", "pwm_us"],
+            "properties": {
+              "normalized": {
+                "type": "array",
+                "minItems": 4,
+                "maxItems": 4,
+                "items": { "type": "number", "minimum": 0, "maximum": 1 }
+              },
+              "pwm_us": {
+                "type": "array",
+                "minItems": 4,
+                "maxItems": 4,
+                "items": { "type": "integer", "minimum": 1000, "maximum": 2000 }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

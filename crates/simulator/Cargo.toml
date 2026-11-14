@@ -1,0 +1,14 @@
+[package]
+name = "drone-sim"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "3D ESP32 drone software-in-the-loop simulator with Rust flight control and a browser cockpit"
+
+[dependencies]
+flight-core = { path = "../flight-core" }
+serde = { workspace = true, features = ["std"] }
+serde_json.workspace = true
+axum = { version = "0.8.9", features = ["ws"] }
+tokio = { version = "1", features = ["rt-multi-thread", "net", "macros", "sync", "time", "signal"] }

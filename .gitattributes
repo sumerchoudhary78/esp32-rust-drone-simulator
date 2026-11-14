@@ -1,0 +1,4 @@
+* text=auto
+*.png binary
+web/vendor/** linguist-vendored
+web/vendor/*.js whitespace=-space-before-tab

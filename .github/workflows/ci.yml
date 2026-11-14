@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  simulator:
+    name: Rust, protocol and browser checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Rust
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt,clippy --target wasm32-unknown-unknown
+          rustup default stable
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Lint Rust
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Run controller and physics scenarios
+        run: cargo test --workspace --locked
+      - name: Check standalone flight core
+        run: cargo check -p flight-core --target wasm32-unknown-unknown --locked
+      - name: Build the simulator
+        run: cargo build -p drone-sim --locked
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          cache: npm
+      - name: Install development dependencies
+        run: npm ci
+      - name: Check live HTTP and WebSocket behavior
+        run: npm test
+      - name: Install Chrome for browser tests
+        run: npx playwright install --with-deps chrome
+      - name: Check the complete browser flight flow
+        run: npm run test:browser
+      - name: Save browser evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: browser-evidence
+          path: |
+            test-results/
+            output/flight-deck-*.png
+          if-no-files-found: ignore
+          retention-days: 7

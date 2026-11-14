@@ -1,0 +1,15 @@
+/target/
+/apps/controller/target/
+/node_modules/
+/test-results/
+/playwright-report/
+/output/
+.DS_Store
+*.keystore
+*.jks
+*.apk
+.env
+.env.*
+!.env.example
+__pycache__/
+*.pyc

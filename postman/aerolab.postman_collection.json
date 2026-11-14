@@ -1,0 +1,52 @@
+{
+  "info": {
+    "name": "Aerolab local simulator",
+    "description": "Read-only checks against the real local simulator. WebSocket mutations are covered by tests/protocol.test.mjs.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [{ "key": "base_url", "value": "http://127.0.0.1:8787" }],
+  "item": [
+    {
+      "name": "Health",
+      "request": { "method": "GET", "url": "{{base_url}}/api/health" },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('healthy live simulator', () => { pm.response.to.have.status(200); const b=pm.response.json(); pm.expect(b.healthy).to.eql(true); pm.expect(b.mode).to.eql('simulation'); pm.expect(b.nominal_loop_hz).to.eql(500); pm.expect(b.snapshot_age_ms).to.be.below(1000); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Telemetry",
+      "request": { "method": "GET", "url": "{{base_url}}/api/telemetry" },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('bounded motor signals', () => { pm.response.to.have.status(200); const b=pm.response.json(); pm.expect(b.type).to.eql('telemetry'); pm.expect(b.motors.pwm_us).to.have.lengthOf(4); b.motors.pwm_us.forEach(v => pm.expect(v).to.be.within(1000,2000)); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Model configuration",
+      "request": { "method": "GET", "url": "{{base_url}}/api/config" },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('watchdog and model boundary', () => { pm.response.to.have.status(200); const b=pm.response.json(); pm.expect(b.command_timeout_ms).to.eql(500); pm.expect(b.motors).to.have.lengthOf(4); pm.expect(b.limitations.length).to.be.at.least(5); });"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

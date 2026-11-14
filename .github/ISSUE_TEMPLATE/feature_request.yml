@@ -1,0 +1,24 @@
+name: Feature proposal
+description: Propose a focused improvement with a way to measure it.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Who needs this, and what problem does it solve?
+    validations:
+      required: true
+  - type: textarea
+    id: change
+    attributes:
+      label: Smallest useful change
+      description: Check ROADMAP.md first and link a related milestone if there is one.
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: How would we verify it?
+      description: Describe an observable result, scenario, metric or acceptance check. Identify simulation versus hardware work.
+    validations:
+      required: true

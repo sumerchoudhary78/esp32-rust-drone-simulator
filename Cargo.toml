@@ -1,0 +1,18 @@
+[workspace]
+members = ["crates/flight-core", "crates/simulator"]
+default-members = ["crates/simulator"]
+exclude = ["apps/controller"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/sumerchoudhary78/esp32-rust-drone-simulator"
+
+[workspace.dependencies]
+serde = { version = "1", default-features = false, features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+lto = "thin"

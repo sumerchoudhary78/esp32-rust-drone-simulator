@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Setup and usage
+    url: https://github.com/sumerchoudhary78/esp32-rust-drone-simulator#quickstart
+    about: Start with the local simulator and controller instructions.
+  - name: Roadmap
+    url: https://github.com/sumerchoudhary78/esp32-rust-drone-simulator/blob/main/ROADMAP.md
+    about: Read priorities and acceptance criteria before proposing a large feature.
