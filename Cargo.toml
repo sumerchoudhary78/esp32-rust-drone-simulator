@@ -1,7 +1,7 @@
 [workspace]
 members = ["crates/flight-core", "crates/simulator"]
 default-members = ["crates/simulator"]
-exclude = ["apps/controller"]
+exclude = ["apps/controller", "firmware/esp32-devkitc"]
 resolver = "2"
 
 [workspace.package]

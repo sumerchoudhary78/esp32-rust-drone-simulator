@@ -1,0 +1,49 @@
+[package]
+name = "aerolab-esp32-devkitc"
+version = "0.1.0-m1"
+edition = "2024"
+rust-version = "1.95"
+license = "MIT"
+repository = "https://github.com/sumerchoudhary78/esp32-rust-drone-simulator"
+description = "Motor-inhibited bootstrap firmware for ESP32-DevKitC-32E (4 MB)"
+publish = false
+
+[workspace]
+resolver = "3"
+
+[[bin]]
+name = "aerolab-esp32-devkitc"
+path = "src/main.rs"
+test = false
+bench = false
+required-features = ["hardware"]
+
+[[bin]]
+name = "aerolab-sim-fixture"
+path = "src/sim_fixture.rs"
+test = false
+bench = false
+required-features = ["simulation-fixture"]
+
+[features]
+default = ["hardware"]
+hardware = []
+simulation-fixture = ["hardware", "esp-hal/unstable"]
+
+[dependencies]
+flight-core = { path = "../../crates/flight-core" }
+
+[target.'cfg(target_arch = "xtensa")'.dependencies]
+esp-hal = { version = "=1.2.2", features = ["esp32"] }
+esp-bootloader-esp-idf = { version = "=0.6.0", features = ["esp32"] }
+esp-backtrace = { version = "=0.20.0", features = ["esp32", "panic-handler", "println"] }
+esp-println = { version = "=0.18.0", features = ["esp32"] }
+
+[profile.dev]
+opt-level = "s"
+
+[profile.release]
+codegen-units = 1
+debug = 2
+lto = "fat"
+opt-level = "s"

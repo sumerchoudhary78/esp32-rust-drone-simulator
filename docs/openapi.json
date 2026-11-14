@@ -3,9 +3,13 @@
   "info": {
     "title": "Aerolab local simulator",
     "version": "0.1.0",
-    "description": "Software-in-the-loop. WebSocket contract: docs/protocol.md."
+    "description": "Local flight lab and device workbench. Optional classic ESP32 CPU co-simulation. WebSocket contract: docs/protocol.md."
   },
-  "servers": [{ "url": "http://127.0.0.1:8787" }],
+  "servers": [
+    {
+      "url": "http://127.0.0.1:8787"
+    }
+  ],
   "paths": {
     "/api/health": {
       "get": {
@@ -15,11 +19,15 @@
             "description": "Flight task publishing fresh snapshots",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Health" }
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
               }
             }
           },
-          "503": { "description": "Flight snapshot is stale" }
+          "503": {
+            "description": "Flight snapshot is stale"
+          }
         }
       }
     },
@@ -31,7 +39,9 @@
             "description": "Latest 25 Hz snapshot",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Telemetry" }
+                "schema": {
+                  "$ref": "#/components/schemas/Telemetry"
+                }
               }
             }
           }
@@ -56,23 +66,119 @@
                     "limitations"
                   ],
                   "properties": {
-                    "protocol_version": { "const": 1 },
-                    "mode": { "const": "simulation" },
-                    "command_timeout_ms": { "const": 500 },
+                    "protocol_version": {
+                      "const": 1
+                    },
+                    "mode": {
+                      "const": "simulation"
+                    },
+                    "command_timeout_ms": {
+                      "const": 500
+                    },
                     "motors": {
                       "type": "array",
                       "minItems": 4,
                       "maxItems": 4,
-                      "items": { "type": "object" }
+                      "items": {
+                        "type": "object"
+                      }
                     },
                     "limitations": {
                       "type": "array",
-                      "items": { "type": "string" }
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   }
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/workbench": {
+      "get": {
+        "operationId": "getWorkbenchCatalog",
+        "responses": {
+          "200": {
+            "description": "Device kind/pin catalog, F450 preset and CPU backend availability"
+          }
+        }
+      }
+    },
+    "/api/circuit/validate": {
+      "post": {
+        "operationId": "validateCircuit",
+        "description": "Read-only net validation; never applies wiring. Same-origin browser requests, 32 KiB limit.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Circuit"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "valid, flight_connected, errors, warnings, resolved wiring"
+          },
+          "403": {
+            "description": "Browser origin rejected"
+          },
+          "413": {
+            "description": "Document too large"
+          },
+          "422": {
+            "description": "Malformed circuit schema"
+          }
+        }
+      }
+    },
+    "/api/firmware": {
+      "post": {
+        "operationId": "prepareFirmware",
+        "description": "Localhost-only image preparation. Does not execute or flash firmware. 16 MiB/image, 16 accepted/session.",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 120
+            },
+            "description": "Plain .elf or .bin filename; never a host path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Image prepared; JSON id/name for firmware_start"
+          },
+          "400": {
+            "description": "Image identity, checksum, format or packaging error"
+          },
+          "403": {
+            "description": "Non-local peer or browser origin rejected"
+          },
+          "413": {
+            "description": "Image too large"
+          },
+          "429": {
+            "description": "Concurrent upload or session image limit"
           }
         }
       }
@@ -91,21 +197,40 @@
           "version"
         ],
         "properties": {
-          "service": { "const": "aerolab" },
-          "mode": { "const": "simulation" },
-          "healthy": { "type": "boolean" },
-          "snapshot_age_ms": { "type": "integer", "minimum": 0 },
-          "nominal_loop_hz": { "const": 500 },
-          "version": { "type": "string" }
+          "service": {
+            "const": "aerolab"
+          },
+          "mode": {
+            "const": "simulation"
+          },
+          "healthy": {
+            "type": "boolean"
+          },
+          "snapshot_age_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "nominal_loop_hz": {
+            "const": 500
+          },
+          "version": {
+            "type": "string"
+          }
         }
       },
       "Vec3": {
         "type": "object",
         "required": ["x", "y", "z"],
         "properties": {
-          "x": { "type": "number" },
-          "y": { "type": "number" },
-          "z": { "type": "number" }
+          "x": {
+            "type": "number"
+          },
+          "y": {
+            "type": "number"
+          },
+          "z": {
+            "type": "number"
+          }
         }
       },
       "Telemetry": {
@@ -118,16 +243,39 @@
           "settings",
           "faults",
           "position_m",
-          "attitude_deg"
+          "attitude_deg",
+          "workbench"
         ],
         "properties": {
-          "type": { "const": "telemetry" },
-          "state": { "enum": ["calibrating", "disarmed", "armed", "failsafe"] },
-          "tick": { "type": "integer", "minimum": 0 },
-          "position_m": { "$ref": "#/components/schemas/Vec3" },
-          "attitude_deg": { "$ref": "#/components/schemas/Vec3" },
-          "settings": { "type": "object" },
-          "faults": { "type": "object" },
+          "type": {
+            "const": "telemetry"
+          },
+          "state": {
+            "enum": [
+              "calibrating",
+              "disarmed",
+              "armed",
+              "failsafe",
+              "firmware",
+              "firmware_stopped"
+            ]
+          },
+          "tick": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "position_m": {
+            "$ref": "#/components/schemas/Vec3"
+          },
+          "attitude_deg": {
+            "$ref": "#/components/schemas/Vec3"
+          },
+          "settings": {
+            "type": "object"
+          },
+          "faults": {
+            "type": "object"
+          },
           "motors": {
             "type": "object",
             "required": ["normalized", "pwm_us"],
@@ -136,13 +284,115 @@
                 "type": "array",
                 "minItems": 4,
                 "maxItems": 4,
-                "items": { "type": "number", "minimum": 0, "maximum": 1 }
+                "items": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                }
               },
               "pwm_us": {
                 "type": "array",
                 "minItems": 4,
                 "maxItems": 4,
-                "items": { "type": "integer", "minimum": 1000, "maximum": 2000 }
+                "items": {
+                  "type": "integer",
+                  "minimum": 1000,
+                  "maximum": 2000
+                }
+              }
+            }
+          },
+          "workbench": {
+            "type": "object",
+            "description": "Applied circuit, validation, driver, CPU availability and guest status/console."
+          }
+        }
+      },
+      "Circuit": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["version", "devices", "wires"],
+        "properties": {
+          "version": {
+            "const": 1
+          },
+          "devices": {
+            "type": "array",
+            "maxItems": 24,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "kind", "x", "y"],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 32,
+                  "pattern": "^[A-Za-z0-9_-]+$"
+                },
+                "kind": {
+                  "enum": [
+                    "esp32",
+                    "mpu6050",
+                    "esc",
+                    "motor",
+                    "battery",
+                    "regulator",
+                    "divider"
+                  ]
+                },
+                "x": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1400
+                },
+                "y": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 900
+                },
+                "slot": {
+                  "type": ["integer", "null"],
+                  "minimum": 1,
+                  "maximum": 4
+                }
+              }
+            }
+          },
+          "wires": {
+            "type": "array",
+            "maxItems": 128,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["from", "to"],
+              "properties": {
+                "from": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["device", "pin"],
+                  "properties": {
+                    "device": {
+                      "type": "string"
+                    },
+                    "pin": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "to": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["device", "pin"],
+                  "properties": {
+                    "device": {
+                      "type": "string"
+                    },
+                    "pin": {
+                      "type": "string"
+                    }
+                  }
+                }
               }
             }
           }

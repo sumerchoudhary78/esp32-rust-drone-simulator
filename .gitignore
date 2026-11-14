@@ -1,5 +1,6 @@
 /target/
 /apps/controller/target/
+/firmware/esp32-devkitc/target/
 /node_modules/
 /test-results/
 /playwright-report/

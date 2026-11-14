@@ -53,6 +53,27 @@ See [native Android setup](apps/controller/README.md) for the dedicated emulator
 check. Android SDK/NDK scripts have macOS defaults and support environment
 overrides; do not assume those dependencies are installed on another machine.
 
+## Firmware and device changes
+
+See [workbench setup](docs/device-workbench.md) and the
+[exact-board firmware guide](firmware/esp32-devkitc/README.md). For guest/peripheral
+changes, run the pinned backend and compiled-binary checks as well:
+
+```sh
+python3 scripts/setup_emulator.py
+python3 scripts/esp32_firmware.py setup
+python3 scripts/esp32_firmware.py test
+python3 scripts/esp32_firmware.py build
+python3 scripts/esp32_firmware.py build-fixture
+python3 -m unittest discover -s tests -p '*_test.py' -v
+AEROLAB_REQUIRE_EMULATOR=1 npx playwright test tests/browser/workbench.spec.mjs
+```
+
+The default Rust workspace excludes firmware toolchains and the native Android
+workspace. Only an explicit `flash --port ...` writes a physical ESP32. Keep
+simulation-only examples separate from hardware flash targets; publish measured
+hardware evidence separately from guest CPU/browser results.
+
 ## Keep changes reviewable
 
 - Describe the concrete problem and resulting behavior. Include reproduction

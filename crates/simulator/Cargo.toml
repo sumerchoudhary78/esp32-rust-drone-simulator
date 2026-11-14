@@ -10,5 +10,6 @@ description = "3D ESP32 drone software-in-the-loop simulator with Rust flight co
 flight-core = { path = "../flight-core" }
 serde = { workspace = true, features = ["std"] }
 serde_json.workspace = true
+sha2 = "0.10"
 axum = { version = "0.8.9", features = ["ws"] }
 tokio = { version = "1", features = ["rt-multi-thread", "net", "macros", "sync", "time", "signal"] }

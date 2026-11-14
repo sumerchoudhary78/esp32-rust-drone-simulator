@@ -1,13 +1,21 @@
-# Future ESP32 adapter: boundary and bench plan
+# ESP32 firmware: current milestone and bench plan
 
 The virtual setup is complete without an ESP32 toolchain. `flight-core` is
 `#![no_std]`, uses no allocation, and receives SI sensor samples and locally
 timestamped commands. It outputs normalized motor commands and a pulse-width
-representation. The simulator supplies all device behavior today.
+representation. The host simulator and optional CPU/device backend supply virtual device behavior.
 
-**There is deliberately no flashable firmware or physical motor output in this
-milestone.** Sharing the controller is useful; copying host scheduling and the
-virtual altitude helper into an aircraft would be incorrect.
+The [milestone-1 firmware](../firmware/esp32-devkitc/README.md) now targets
+**ESP32-DevKitC-32E / WROOM-32E, ECO3, 4 MiB** with pinned tools and a flashable
+boot-only image. Motor pins remain LOW after initialization; sensor/PWM/network
+flight drivers are not enabled. Cross-build, offline image checks and emulated
+application startup pass; physical flash/boot and pad timing remain unverified.
+The [device workbench](device-workbench.md) executes an additional simulation-only
+HAL peripheral example against virtual MPU/ADC/ESC devices. These are separate
+programs and separate evidence from a physical flight-controller implementation.
+
+Sharing the controller is useful; copying host scheduling or the virtual height
+helper into an aircraft would be incorrect.
 
 ## Proposed interfaces
 
@@ -36,14 +44,14 @@ packet format and a hard watchdog for the hardware link separately.
 
 ## Tentative classic ESP32 DevKit pin plan
 
-| Signal | Proposed pin | Constraint |
-| --- | --- | --- |
-| MPU6050 SDA / SCL | GPIO 21 / 22 | Verified 3.3 V logic and pull-ups; module regulators vary |
-| Motor 1 · front left · CW | GPIO 25 | Output peripheral and exact board must be verified |
-| Motor 2 · front right · CCW | GPIO 26 | Output peripheral and exact board must be verified |
-| Motor 3 · rear right · CW | GPIO 27 | Output peripheral and exact board must be verified |
-| Motor 4 · rear left · CCW | GPIO 14 | Output peripheral and exact board must be verified |
-| Battery sensing | Unassigned | Design a divider, filtering and ADC calibration first |
+| Signal                      | Proposed pin                    | Constraint                                                                                        |
+| --------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------- |
+| MPU6050 SDA / SCL           | GPIO 21 / 22                    | Verified 3.3 V logic and pull-ups; module regulators vary                                         |
+| Motor 1 · front left · CW   | GPIO 25                         | Output peripheral and exact board must be verified                                                |
+| Motor 2 · front right · CCW | GPIO 26                         | Output peripheral and exact board must be verified                                                |
+| Motor 3 · rear right · CW   | GPIO 27                         | Output peripheral and exact board must be verified                                                |
+| Motor 4 · rear left · CCW   | GPIO 14                         | Output peripheral and exact board must be verified                                                |
+| Battery sensing             | GPIO34 planned (ADC1 channel 6) | Virtual 100k / 27k divider only; physical divider/filtering and ADC calibration remain unverified |
 
 Spins are viewed from above. Confirm the matching propeller handedness before
 any powered test. The visual front arms are orange, the rear arms white.
@@ -56,9 +64,7 @@ ratings and regulator capacity still need verification.
 
 ## Hardware gates still open
 
-- Pick the exact ESP32 variant and runtime. Classic ESP32 uses Xtensa and needs
-  the Espressif toolchain. ESP32-C variants have different peripherals/toolchains;
-  a generic DevKit name is not a complete target specification.
+- Verify physical flash/boot on the selected ESP32-DevKitC-32E; the pinned Xtensa toolchain and boot-only image are implemented. Other DevKit variants are not interchangeable.
 - Verify the bill of materials with measured motor/prop thrust/current curves,
   ESC/battery ratings, frame clearance, center of mass and actual inertia.
 - Measure timing under Wi-Fi traffic: worst-case loop jitter, sensor sample

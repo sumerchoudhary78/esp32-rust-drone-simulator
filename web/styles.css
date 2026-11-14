@@ -2249,3 +2249,414 @@ a:focus-visible {
     transition: none !important;
   }
 }
+
+/* Device assembly workbench */
+.workbench-heading,
+.firmware-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 24px;
+}
+.workbench-heading h2 {
+  font-size: 29px;
+  letter-spacing: -1px;
+  margin: 12px 0 8px;
+}
+.workbench-heading p,
+.firmware-panel p {
+  color: var(--muted, #758078);
+  line-height: 1.65;
+}
+.workbench-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 14px;
+  margin-bottom: 20px;
+}
+.workbench-toolbar .button,
+.firmware-actions .button {
+  font-size: 12px;
+  padding: 10px 13px;
+  white-space: nowrap;
+}
+.workbench-toolbar .primary {
+  margin-left: auto;
+}
+.file-button {
+  position: relative;
+  cursor: pointer;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.file-button input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+.file-button:focus-within {
+  outline: 2px solid #bb7a4e;
+  outline-offset: 2px;
+}
+.workbench-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 270px;
+  gap: 20px;
+  align-items: start;
+}
+.workbench-main {
+  min-width: 0;
+}
+.device-palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin: 0 0 12px;
+}
+.device-palette > span {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  margin-right: 5px;
+  color: #8c958d;
+}
+.device-palette button,
+.fixture-actions button {
+  border: 1px solid #dce2da;
+  background: #fff;
+  border-radius: 6px;
+  padding: 7px 10px;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  color: #49594d;
+}
+.device-palette button:hover,
+.fixture-actions button:hover {
+  background: #eef1e9;
+  border-color: #8a9b7a;
+}
+.circuit-scroll {
+  overflow: auto;
+  max-height: 740px;
+  background: #f5f7f1;
+  border: 1px solid #d9e1d6;
+}
+#circuit-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  stroke: none;
+  stroke-width: 0;
+  min-width: 740px;
+  touch-action: none;
+  user-select: none;
+}
+.circuit-scroll.detailed #circuit-canvas {
+  width: 1240px;
+}
+.device-body {
+  cursor: grab;
+  stroke: #ffffff;
+  stroke-width: 1.2;
+  filter: drop-shadow(0 3px 3px #23352d18);
+}
+.circuit-device.selected .device-body {
+  stroke: #d69854;
+  stroke-width: 3;
+}
+.device-title {
+  fill: #fff;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.25px;
+  pointer-events: none;
+}
+.pin-label {
+  fill: #e2e9e6;
+  font-size: 10px;
+  font-family: ui-monospace, monospace;
+  pointer-events: none;
+}
+.chip-label {
+  fill: #3c4a45;
+  font-size: 8px;
+  font-family: ui-monospace, monospace;
+  pointer-events: none;
+}
+.circuit-pin {
+  cursor: crosshair;
+  outline: none;
+}
+.circuit-pin:hover circle:nth-child(2),
+.circuit-pin:focus circle:nth-child(2) {
+  fill: #ffd88f;
+  stroke: #ffc16b;
+  stroke-width: 3;
+}
+.circuit-wire {
+  cursor: pointer;
+  pointer-events: stroke;
+  outline: none;
+  opacity: 0.75;
+}
+.circuit-wire:hover,
+.circuit-wire:focus {
+  stroke: #d96a45;
+  stroke-width: 6;
+  opacity: 1;
+}
+.circuit-footer {
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  padding: 12px 2px;
+  font-size: 10px;
+  color: #7b887d;
+  line-height: 1.6;
+}
+.circuit-footer b {
+  white-space: nowrap;
+  font-weight: 600;
+}
+.wire-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+  font-size: 10px;
+  color: #748076;
+  margin: 5px 0 20px;
+}
+.wire-legend span:before {
+  content: "";
+  display: inline-block;
+  width: 12px;
+  height: 3px;
+  vertical-align: middle;
+  margin-right: 5px;
+  background: #73817e;
+}
+.wire-legend .vbat:before {
+  background: #c06b50;
+}
+.wire-legend .five:before {
+  background: #d3973c;
+}
+.wire-legend .three:before {
+  background: #9b75ad;
+}
+.wire-legend .sda:before {
+  background: #4991b2;
+}
+.wire-legend .scl:before {
+  background: #76a06b;
+}
+.wire-legend .pwm:before {
+  background: #d69a51;
+}
+.workbench-inspector {
+  display: grid;
+  gap: 14px;
+}
+.workbench-inspector .detail-card {
+  padding: 20px;
+}
+.workbench-inspector h3 {
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 10px 0;
+}
+.workbench-inspector p,
+.validation-list {
+  font-size: 11px;
+  line-height: 1.7;
+  color: #758078;
+}
+.validation-list {
+  padding-left: 16px;
+  margin: 10px 0 0;
+}
+.validation-list li {
+  margin: 5px 0;
+}
+.connection-pill {
+  padding: 8px 11px;
+  background: #eef1e8;
+  border: 1px solid #dae2d3;
+  border-radius: 7px;
+  color: #6c7a59;
+  font-size: 11px;
+  white-space: normal;
+  line-height: 1.4;
+}
+.connected {
+  color: #3f795b;
+  background: #edf5ec;
+}
+.device-live-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 11px;
+  padding: 8px 0;
+  border-bottom: 1px solid #edf0ea;
+  color: #758078;
+}
+.device-live-row b {
+  color: #3d5044;
+}
+.workbench-inspector dl {
+  font-size: 10px;
+}
+.workbench-inspector dd {
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+.firmware-panel {
+  padding: 28px;
+  margin-top: 22px;
+}
+.firmware-heading {
+  margin-bottom: 0;
+}
+.firmware-heading h2 {
+  margin: 10px 0;
+  font-size: 23px;
+  letter-spacing: -0.7px;
+}
+.firmware-panel p {
+  font-size: 12px;
+}
+.firmware-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 20px 0;
+}
+#firmware-upload-status {
+  font-size: 11px;
+  color: #7b877c;
+  max-width: 280px;
+  overflow-wrap: anywhere;
+}
+.cpu-metrics {
+  display: flex;
+  gap: 30px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  color: #879284;
+  padding: 16px 0;
+}
+.cpu-metrics b {
+  display: block;
+  color: #455943;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  margin-top: 5px;
+  font-size: 15px;
+}
+.uart-output {
+  padding: 20px;
+  background: #23372f;
+  color: #cbd9c6;
+  font:
+    11px/1.7 ui-monospace,
+    monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 260px;
+  overflow: auto;
+  border-radius: 9px;
+  min-height: 110px;
+}
+#uart-form {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 14px 0;
+  font-size: 12px;
+}
+#uart-input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid #dce3d6;
+  border-radius: 6px;
+  padding: 11px;
+  font:
+    12px ui-monospace,
+    monospace;
+  background: #fafbf7;
+}
+.fixture-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 11px;
+  color: #7c887d;
+}
+.firmware-panel .model-boundary {
+  font-size: 10px;
+  color: #929b91;
+  margin: 20px 0 0;
+  border-top: 1px solid #e6ebe2;
+  padding-top: 15px;
+}
+.state-badge.firmware {
+  background: #e7efe5;
+  color: #536f43;
+}
+.state-badge.firmware_stopped {
+  background: #f4e8dc;
+  color: #9c7143;
+}
+@media (max-width: 1200px) {
+  .workbench-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .workbench-inspector {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .circuit-scroll {
+    max-height: 740px;
+  }
+}
+@media (max-width: 700px) {
+  .workbench-heading {
+    align-items: start;
+    flex-direction: column;
+  }
+  .workbench-heading h2 {
+    font-size: 24px;
+  }
+  .workbench-toolbar .primary {
+    margin-left: 0;
+  }
+  .workbench-inspector {
+    grid-template-columns: 1fr;
+  }
+  .firmware-panel {
+    padding: 20px;
+  }
+  .firmware-heading {
+    align-items: start;
+    flex-direction: column;
+    gap: 0;
+  }
+  #uart-form label {
+    display: none;
+  }
+  .cpu-metrics {
+    gap: 20px;
+  }
+}

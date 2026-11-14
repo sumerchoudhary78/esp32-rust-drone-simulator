@@ -1,3 +1,6 @@
+pub mod circuit;
+pub mod emulator;
+pub mod firmware_upload;
 pub mod physics;
 pub mod server;
 use flight_core::{
@@ -76,6 +79,15 @@ pub enum ClientMessage {
         packet_loss: f32,
         wind: f32,
     },
+    Circuit {
+        circuit: circuit::Circuit,
+    },
+    FirmwareStart {
+        id: String,
+    },
+    FirmwareUart {
+        text: String,
+    },
     Tune {
         kp: f32,
         ki: f32,
@@ -85,6 +97,8 @@ pub enum ClientMessage {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Action {
+    FirmwareStop,
+    BuiltinController,
     Reset,
     EmergencyStop,
     Takeoff,
@@ -112,7 +126,7 @@ pub struct Telemetry {
     pub r#type: &'static str,
     pub tick: u64,
     pub sim_time_s: f32,
-    pub state: FlightState,
+    pub state: &'static str,
     pub reason: Option<StopReason>,
     pub calibration_progress: f32,
     pub attitude_deg: Vec3,
@@ -139,6 +153,16 @@ pub struct Telemetry {
     pub nominal_loop_hz: u32,
     pub measured_loop_hz: f32,
     pub timing_overruns: u64,
+    pub workbench: WorkbenchSnapshot,
+}
+#[derive(Clone, Serialize)]
+pub struct WorkbenchSnapshot {
+    pub revision: u64,
+    pub circuit: circuit::Circuit,
+    pub validation: circuit::Validation,
+    pub driver: &'static str,
+    pub backend_available: bool,
+    pub firmware: emulator::Status,
 }
 struct Packet {
     command: Command,
@@ -165,9 +189,16 @@ pub struct World {
     received: u64,
     dropped: u64,
     rng: u64,
+    pub circuit: circuit::Circuit,
+    pub validation: circuit::Validation,
+    circuit_revision: u64,
+    firmware: Option<emulator::Runtime>,
+    guest_heartbeat: std::time::Instant,
 }
 impl Default for World {
     fn default() -> Self {
+        let circuit = circuit::Circuit::preset();
+        let validation = circuit.validate();
         let mut plant = Plant::default();
         let last_imu = plant.imu();
         let mut world = Self {
@@ -190,6 +221,11 @@ impl Default for World {
             received: 0,
             dropped: 0,
             rng: 1234567,
+            circuit,
+            validation,
+            circuit_revision: 0,
+            firmware: None,
+            guest_heartbeat: std::time::Instant::now(),
         };
         world.event(
             "info",
@@ -219,6 +255,9 @@ impl World {
     }
     pub fn disconnect(&mut self, id: u64) {
         if self.controller_id == Some(id) {
+            if let Some(f) = &mut self.firmware {
+                f.stop("Controller disconnected · guest outputs inhibited");
+            }
             self.controller_id = None;
             self.pending.clear();
             self.highest_sequence = None;
@@ -229,6 +268,9 @@ impl World {
         }
     }
     fn claim(&mut self, id: u64) {
+        if let Some(f) = &mut self.firmware {
+            f.stop("Control ownership changed · restart guest explicitly");
+        }
         self.pending.clear();
         self.highest_sequence = None;
         self.flying = false;
@@ -330,7 +372,62 @@ impl World {
                 Ok(())
             }
             ClientMessage::Action { action } => self.action(action),
+            ClientMessage::Circuit { circuit } => self.apply_circuit(circuit),
+            ClientMessage::FirmwareUart { text } => self
+                .firmware
+                .as_ref()
+                .ok_or("Start firmware before using UART")?
+                .send_uart(&text),
+            ClientMessage::FirmwareStart { .. } => {
+                Err("Firmware image must be resolved by the server")
+            }
         }
+    }
+    pub fn apply_circuit(&mut self, circuit: circuit::Circuit) -> Result<(), &'static str> {
+        self.pending.clear();
+        self.core.disarm();
+        self.flying = false;
+        self.landing = false;
+        self.must_release_arm = true;
+        if let Some(f) = &mut self.firmware {
+            f.stop("Circuit changed · restart guest explicitly");
+        }
+        let validation = circuit.validate();
+        if !validation.valid {
+            return Err("Circuit contains invalid connections; correct the reported errors");
+        }
+        self.circuit = circuit;
+        self.validation = validation;
+        self.circuit_revision += 1;
+        self.core = FlightController::default();
+        self.event(
+            "info",
+            "Circuit applied · outputs inhibited · recalibrating connected sensor",
+        );
+        Ok(())
+    }
+    pub fn start_firmware(&mut self, id: u64, image: emulator::Image) -> Result<(), String> {
+        if self.controller_id != Some(id) {
+            return Err("Take control before starting firmware".into());
+        }
+        if !self.validation.valid || !self.validation.wiring.esp_powered {
+            return Err("Apply a valid circuit with a powered ESP32 first".into());
+        }
+        if self.core.state == FlightState::Armed {
+            return Err("Disarm the built-in controller first".into());
+        }
+        self.firmware = None;
+        self.core.disarm();
+        self.pending.clear();
+        self.flying = false;
+        self.landing = false;
+        self.firmware = Some(emulator::Runtime::start(
+            image,
+            self.validation.wiring.clone(),
+        )?);
+        self.guest_heartbeat = std::time::Instant::now();
+        self.event("info","Guest ESP32 firmware started · built-in pilot controls disabled · use firmware UART protocol");
+        Ok(())
     }
     pub fn receive(&mut self, command: Command) -> Result<(), &'static str> {
         if !command.valid() {
@@ -341,6 +438,22 @@ impl World {
         }
         self.highest_sequence = Some(command.sequence);
         self.received += 1;
+        if self.firmware.is_some() {
+            if !self.faults.link_loss {
+                self.guest_heartbeat = std::time::Instant::now();
+            }
+            return Ok(());
+        }
+        if command.arm && !self.validation.flight_connected {
+            return Err("Complete the drone circuit before arming the built-in controller");
+        }
+        if command.arm
+            && self.validation.wiring.motor_gpios != [Some(25), Some(26), Some(27), Some(14)]
+        {
+            return Err(
+                "Built-in controller expects motor GPIOs 25/26/27/14; use matching wiring or your own firmware",
+            );
+        }
         self.rng ^= self.rng << 13;
         self.rng ^= self.rng >> 7;
         self.rng ^= self.rng << 17;
@@ -362,7 +475,12 @@ impl World {
             Action::Reset => {
                 let id = self.controller_id;
                 let event_id = self.event_id;
+                let circuit = self.circuit.clone();
+                let revision = self.circuit_revision;
                 *self = Self::default();
+                self.validation = circuit.validate();
+                self.circuit = circuit;
+                self.circuit_revision = revision;
                 self.controller_id = id;
                 self.event_id = event_id;
                 self.events.clear();
@@ -370,6 +488,9 @@ impl World {
                 self.event("info", "Workspace reset · calibrating stationary MPU6050");
             }
             Action::EmergencyStop => {
+                if let Some(f) = &mut self.firmware {
+                    f.stop("Emergency stop · guest process stopped and outputs inhibited");
+                }
                 self.pending.clear();
                 self.flying = false;
                 self.landing = false;
@@ -381,6 +502,9 @@ impl World {
                 );
             }
             Action::Takeoff => {
+                if self.firmware.is_some() {
+                    return Err("Guest firmware owns the motors; use its UART/control protocol");
+                }
                 if self.core.state != FlightState::Armed {
                     return Err("Arm at zero throttle before takeoff");
                 }
@@ -409,6 +533,19 @@ impl World {
                 );
             }
             Action::ClaimControl => {}
+            Action::FirmwareStop => {
+                if let Some(f) = &mut self.firmware {
+                    f.stop("Guest stopped by user · outputs inhibited");
+                }
+                self.core.motors = MotorOutputs::STOP;
+            }
+            Action::BuiltinController => {
+                self.firmware = None;
+                self.core = FlightController::default();
+                self.pending.clear();
+                self.must_release_arm = true;
+                self.event("info", "Built-in Rust controller selected · recalibrating");
+            }
         }
         Ok(())
     }
@@ -431,6 +568,10 @@ impl World {
             .clamp(0.05, 0.9)
     }
     pub fn step(&mut self) {
+        if self.firmware.is_some() {
+            self.step_firmware();
+            return;
+        }
         let before = self.core.state;
         while self
             .pending
@@ -462,7 +603,14 @@ impl World {
                 self.dropped += 1;
             }
         }
-        let sample = if self.faults.imu_failure {
+        let wiring = &self.validation.wiring;
+        let sensor_connected = self.validation.valid
+            && wiring.esp_powered
+            && wiring.imu_powered
+            && wiring.sda_gpio == Some(21)
+            && wiring.scl_gpio == Some(22)
+            && wiring.imu_address == 0x68;
+        let sample = if self.faults.imu_failure || !sensor_connected {
             None
         } else {
             let imu = self.plant.imu();
@@ -475,6 +623,15 @@ impl World {
             self.plant.voltage()
         };
         self.core.step(sample, voltage, self.now_ms());
+        for (i, gpio) in [25, 26, 27, 14].into_iter().enumerate() {
+            if !self.validation.valid
+                || !wiring.motors_connected[i]
+                || wiring.motor_gpios[i] != Some(gpio)
+            {
+                self.core.motors.normalized[i] = 0.;
+                self.core.motors.pwm_us[i] = 1000;
+            }
+        }
         if self.core.state == FlightState::Failsafe {
             self.flying = false;
             self.landing = false;
@@ -517,8 +674,41 @@ impl World {
         }
         self.tick += 1;
     }
+    fn step_firmware(&mut self) {
+        let imu = if self.firmware.as_ref().is_some_and(|f| f.needs_sample()) {
+            self.plant.imu()
+        } else {
+            self.last_imu
+        };
+        self.last_imu = imu;
+        let voltage = emulator::battery_voltage(&self.plant, self.faults.low_battery);
+        let expired = self.guest_heartbeat.elapsed() >= std::time::Duration::from_millis(500);
+        let runtime = self.firmware.as_mut().expect("firmware mode");
+        if expired && runtime.status.running {
+            runtime.stop("Host control heartbeat expired · guest outputs inhibited");
+        }
+        let connected =
+            self.validation.valid && self.validation.wiring.imu_powered && !self.faults.imu_failure;
+        let (motors, advanced) = runtime.step(imu, voltage, connected);
+        self.core.motors = motors;
+        if !advanced {
+            return;
+        }
+        self.tick += 1;
+        if self.plant.step(
+            motors.normalized,
+            self.settings.wind,
+            self.faults.motor_failure,
+        ) {
+            self.event("danger", "Ground impact · simplified collision model");
+        }
+    }
     pub fn timing_overrun(&mut self) {
         self.timing_overruns += 1;
+        if let Some(f) = &mut self.firmware {
+            f.stop("Host scheduling overrun · guest outputs inhibited");
+            self.core.motors = MotorOutputs::STOP;
+        }
         if self.core.state == FlightState::Armed {
             self.pending.clear();
             self.must_release_arm = true;
@@ -533,10 +723,27 @@ impl World {
             r#type: "telemetry",
             tick: self.tick,
             sim_time_s: self.tick as f32 * DT,
-            state: self.core.state,
+            state: if let Some(f) = &self.firmware {
+                if f.status.running {
+                    "firmware"
+                } else {
+                    "firmware_stopped"
+                }
+            } else {
+                match self.core.state {
+                    FlightState::Calibrating => "calibrating",
+                    FlightState::Disarmed => "disarmed",
+                    FlightState::Armed => "armed",
+                    FlightState::Failsafe => "failsafe",
+                }
+            },
             reason: self.core.reason,
             calibration_progress: self.core.calibration_samples as f32 / CALIBRATION_SAMPLES as f32,
-            attitude_deg: self.core.attitude * degrees,
+            attitude_deg: if self.firmware.is_some() {
+                self.plant.orientation.euler() * degrees
+            } else {
+                self.core.attitude * degrees
+            },
             truth_attitude_deg: self.plant.orientation.euler() * degrees,
             orientation: self.plant.orientation,
             rates_deg_s: self.core.rates * degrees,
@@ -572,6 +779,22 @@ impl World {
             nominal_loop_hz: 500,
             measured_loop_hz: self.measured_loop_hz,
             timing_overruns: self.timing_overruns,
+            workbench: WorkbenchSnapshot {
+                revision: self.circuit_revision,
+                circuit: self.circuit.clone(),
+                validation: self.validation.clone(),
+                driver: if self.firmware.is_some() {
+                    "firmware"
+                } else {
+                    "builtin"
+                },
+                backend_available: emulator::backend_path().is_file(),
+                firmware: self
+                    .firmware
+                    .as_ref()
+                    .map(|f| f.status.clone())
+                    .unwrap_or_default(),
+            },
         }
     }
 }

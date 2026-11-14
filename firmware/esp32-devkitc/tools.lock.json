@@ -1,0 +1,24 @@
+{
+  "toolchain": "aerolab-esp-1.97.0.0",
+  "xtensa_rust_version": "1.97.0.0",
+  "espup_version": "0.19.0",
+  "espflash_version": "4.7.0",
+  "platforms": {
+    "aarch64-apple-darwin": {
+      "espup_sha256": "e18e722774b5fa2e8de73753ffe14370a621af7366ad5bdb73d7c42054fa2cdd",
+      "espflash_sha256": "4313a4cf3e05036d4e1d8edeef938a11661eb5b9ba5759cabbf48ad4f6fbc180"
+    },
+    "x86_64-apple-darwin": {
+      "espup_sha256": "f075dd9ca0e9c64ee5f342b27f9cf25369e2445fd67ac39f51aac7f39078916d",
+      "espflash_sha256": "3e3ca415f15f58000d351ca8dd22137c2d04384a8153f65b831553074601ee03"
+    },
+    "aarch64-unknown-linux-gnu": {
+      "espup_sha256": "a7e841449edbc78ce2443416e90027890b52896698767b6e45a5caafc880498b",
+      "espflash_sha256": "3158e1c78f3e80ad0389c1d925b69736e1955a60b3cadf932e6d0d74d731b448"
+    },
+    "x86_64-unknown-linux-gnu": {
+      "espup_sha256": "f31411c64dffff4da0f0e23c432b9a5fda48942ff8695b8b21009ceb7007bcc0",
+      "espflash_sha256": "8ab3bafeb212ccb1d7a9c422936b9bc86f8b00fe2731053ed8ab875c8d2f0c4d"
+    }
+  }
+}

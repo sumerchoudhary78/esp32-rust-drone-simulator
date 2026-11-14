@@ -11,15 +11,17 @@ Run the simulation on your computer and fly from a browser or the optional
 Rust + Slint Android controller. No ESP32 board, Pixhawk, battery or motors are
 required for the virtual setup.
 
-**Current stage:** software-in-the-loop (SITL). The reusable Rust flight core
-and virtual hardware run on the host. Flashable ESP32 firmware is a future
-milestone; this project does not emulate the ESP32 CPU or qualify a real drone
-for flight.
+**Current stage:** a browser flight lab, an interactive electronics workbench,
+and optional classic-ESP32 CPU co-simulation for your compiled firmware.
+A flashable, motor-inhibited Rust bootstrap targets one exact ESP32 board.
+Physical bench/flight qualification remains pending.
 
 ![ESP32 Rust drone simulator showing the 3D quadcopter, live MPU6050 attitude telemetry, pilot controls and motor PWM outputs](docs/images/esp32-rust-drone-simulator-flight-deck.png)
 
 [Quickstart](#quickstart) · [Features](#what-is-implemented) ·
 [Architecture](#architecture) · [Roadmap](ROADMAP.md) ·
+[Device workbench](docs/device-workbench.md) ·
+[ESP32 firmware](firmware/esp32-devkitc/README.md) ·
 [Contributing](CONTRIBUTING.md) ·
 [Report a bug](https://github.com/sumerchoudhary78/esp32-rust-drone-simulator/issues/new/choose)
 
@@ -32,6 +34,10 @@ for flight.
   loses thrust.
 - Change gains and link conditions, then inspect the response and export flight
   data for your own analysis.
+- Assemble an ESP32, MPU6050, four ESCs/motors and battery circuit. Missing power
+  or signal wires affect the actual simulation.
+- Upload your own classic-ESP32 ELF/bin and connect its I²C, ADC, UART and LEDC
+  PWM accesses to the virtual devices using the optional Flexe CPU backend.
 
 The flight core is allocation-free `no_std` Rust. The 3D view displays the
 server's simulated state; flight dynamics and stabilization execute in Rust.
@@ -98,6 +104,53 @@ See [`apps/controller/README.md`](apps/controller/README.md) for APK builds.
 
 <img src="docs/images/rust-slint-android-drone-controller.png" alt="Rust and Slint Android controller flying the virtual quadcopter with live altitude and battery telemetry" width="280">
 
+## Assemble the devices and run your firmware
+
+Open **Virtual hardware**. Start from the F450 reference circuit or add all 13
+parts to an empty workspace. Connect pins, drag parts, inspect devices, validate
+nets and export/import your assembly. Applying wiring stops motors. Shorts are
+rejected; disconnected components cannot supply data or thrust.
+
+![ESP32, MPU6050, four ESCs and motors, battery, regulator and divider in the wiring workbench](docs/images/esp32-drone-device-workbench.png)
+
+For compiled classic-ESP32 firmware, install the optional native CPU backend:
+
+```sh
+# Requires Python 3.11+, C17 compiler, CMake, OpenSSL and zlib development files.
+python3 scripts/setup_emulator.py
+cargo run --release --locked
+```
+
+Choose a `.elf` or `.bin` from localhost and select **Start firmware**. Your code
+executes on an emulated Xtensa LX6 and owns its motor controls. The host physics
+and guest clock advance together; it can run slower than real time. UART0,
+MPU6050 I²C, ADC1 and LEDC PWM are connected to the applied assembly. Guest Wi-Fi,
+DShot, electrical transients and cycle-accurate timing are outside this adapter.
+See [setup, wiring, example firmware and compatibility limits](docs/device-workbench.md).
+
+## Flashable Rust firmware: milestone 1
+
+Exact board: **ESP32-DevKitC-32E / ESP32-WROOM-32E, ECO3, 4 MiB**.
+
+```sh
+python3 scripts/esp32_firmware.py setup
+python3 scripts/esp32_firmware.py test
+python3 scripts/esp32_firmware.py build
+```
+
+This produces an ELF, merged flash image, manifest and hashes in
+`output/firmware/esp32-devkitc-m1/`. The program prints a serial heartbeat and
+holds the four reserved motor pins LOW after initialization. It has no PWM,
+network receiver or sensor driver. The explicit `flash --port ...` command is
+covered in the [firmware guide](firmware/esp32-devkitc/README.md).
+Cross-build, image integrity and emulated application startup are checked;
+physical flash/boot and flight tests are still pending.
+
+For a **simulation-only** program that reads the MPU6050/ADC and drives PWM:
+`python3 scripts/esp32_firmware.py build-fixture`. Upload its ELF from
+`output/firmware/simulation-fixture/`. It is separate from the boot-only program,
+contains no flight stabilization, and is never selected by the flash helper.
+
 ## What is implemented
 
 | Layer       | Behavior                                                                                                                                                                 |
@@ -110,6 +163,8 @@ See [`apps/controller/README.md`](apps/controller/README.md) for APK builds.
 | Link        | 50 Hz commands, sequence validation, configurable 0–800 ms latency, 0–100% loss; 25 Hz telemetry                                                                         |
 | Safety      | Zero-throttle/level/voltage arm gates; latched motor cut for 500 ms command expiry, IMU failure, critical voltage, >70° tilt, host scheduling overrun and emergency stop |
 | Flight deck | Interactive 3D orbit/top/follow, touch/keyboard controls, attitude plot, ESC bars, hardware map, PID/environment settings, 40-event log, CSV export                      |
+| Workbench   | 13 draggable/wireable devices, 38-pin board, net validation, import/export, applied connectivity and live device state                                                   |
+| Firmware    | Optional actual LX6 guest execution, MPU6050 I²C, ADC1, UART0, LEDC PWM; boot-only physical-board image and simulation-only peripheral example                           |
 | Ownership   | One controller and any observers; takeover disarms; invalid or replayed commands never refresh the watchdog                                                              |
 
 ## Architecture
@@ -146,7 +201,11 @@ crates/simulator/src/
   physics.rs     plant and noisy register-level IMU model
   lib.rs         link model, assistance, faults and telemetry
   server.rs      Axum HTTP/WebSocket; separate flight thread
-web/             offline 3D cockpit and phone controls
+  circuit.rs     device/pin catalog, circuit nets and power/signal validation
+  emulator.rs    bounded CPU-process handoff, guest clock and output inhibition
+firmware/        exact-board Rust bootstrap and simulation-only peripheral fixture
+emulation/       optional Flexe board adapter
+web/             offline 3D cockpit, device workbench and phone controls
 apps/controller/ optional native Rust/Slint desktop/Android UI
 tests/           live protocol and browser integration tests
 docs/            protocol, OpenAPI and hardware-port boundary
@@ -236,9 +295,11 @@ compatibility, independent inhibition and restrained validation remain open.
 
 ## Before hardware
 
-This is **not ESP32 CPU, electrical, radio or ESC-firmware emulation**. It does
-not flash an ESP32 or drive GPIO. Plant constants and gains are illustrative,
-not measurements of the suggested A2212/10-inch/3S build.
+The optional backend executes classic ESP32 instructions and supported peripheral
+accesses. It does not simulate electrical circuits, RF or ESC firmware. The
+web simulator never writes a physical board. Only the separate, explicit
+`esp32_firmware.py flash --port ...` helper does. Plant constants and gains are
+illustrative, not measured A2212/10-inch/3S performance.
 
 The altitude helper uses simulated ground-truth height and vertical velocity.
 An MPU6050 cannot supply those measurements. The six-axis filter also has no
@@ -249,10 +310,10 @@ The defined failsafe is **motor cut**, so an airborne quad can fall. This lab
 does not implement or promise an autonomous safe landing on link loss. The
 assisted Land button is a simulation-only normal-flight helper.
 
-See [`docs/esp32-port.md`](docs/esp32-port.md) for the future ESP32 adapter,
-proposed pins, power boundaries and propellers-off validation requirements.
+See [`docs/esp32-port.md`](docs/esp32-port.md) for the current firmware milestone,
+remaining driver/watchdog work and propellers-off validation requirements.
 
-Official references used for the host and future platform adapters:
+Official references used for the host and firmware adapters:
 [Axum WebSockets](https://docs.rs/axum/0.8.9/axum/extract/ws/index.html),
 [Rust on ESP hardware/toolchains](https://docs.espressif.com/projects/rust/book/introduction/hardware-overview.html),
 [Slint Android](https://docs.slint.dev/latest/docs/rust/slint/android/).

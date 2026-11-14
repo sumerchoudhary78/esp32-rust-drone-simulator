@@ -73,7 +73,7 @@ impl Plant {
     }
     pub fn step(&mut self, outputs: [f32; 4], wind: f32, motor_failure: bool) -> bool {
         for (i, motor) in self.motor_speeds.iter_mut().enumerate() {
-            let target = if motor_failure && i == 0 {
+            let target = if self.charge <= 0. || motor_failure && i == 0 {
                 0.
             } else {
                 outputs[i]

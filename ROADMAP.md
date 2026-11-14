@@ -1,124 +1,87 @@
-# ESP32 Rust Drone Simulator roadmap
+# ESP32 Rust Drone roadmap
 
-The aim is a useful learning and experimentation platform that can eventually
-share measured flight-control logic with an ESP32 bench build. Better simulation
-evidence comes before physical free flight. There are no committed dates.
+The next deliverable is a measured ESP32 bench controller. Simulation supports
+that work; it does not establish physical flight readiness. No dates are promised.
 
-## Current foundation · v0.1
+## Available now
 
-- [x] Allocation-free `no_std` Rust controller and MPU6050 register decoder.
-- [x] Quaternion attitude estimation, rate PID and X motor mixing.
-- [x] Noisy IMU, motor lag, battery depletion and 6-DOF virtual quadcopter.
-- [x] 3D browser flight deck and Rust + Slint desktop/Android controller.
-- [x] Command sequence checks, ownership, arming gates and latched motor-cut
-      failsafes.
-- [x] Link delay/loss, sensor, battery and motor fault injection.
-- [x] Telemetry, attitude plots, CSV capture and automated controller/integration
-      tests.
+- [x] Shared `no_std` Rust fusion, calibration, PID, X mixer and arming/failsafes.
+- [x] 3D F450 physics, noisy MPU6050 samples, ESC/motor lag and battery depletion.
+- [x] Browser controls, Rust + Slint Android controller, telemetry, faults and CSV.
+- [x] Assemble 13 devices with real pin names; validate power/signal nets, apply
+      connections, save/share circuits and inspect live devices.
+- [x] Optional classic ESP32 LX6 instruction execution against MPU I²C, ADC1,
+      UART0 and LEDC PWM, with the plant advancing alongside the guest clock.
+- [x] Actual compiled HAL peripheral example and guest/browser regression tests.
 
-This is host software-in-the-loop. No flashable ESP32 adapter, real altitude
-sensor, position hold or physically validated flight behavior is included.
+Device models are functional approximations; guest Wi-Fi, electrical transients,
+ESC firmware and cycle-accurate timing are outside the current adapter.
 
-## 1. Reproducible experiments · next
+## 1. One exact board, flashable bootstrap · current hardware milestone
 
-**Problem:** a person can fly and export telemetry, but sharing a screenshot is
-not enough to reproduce the exact inputs, model and disturbance.
+- [x] ESP32-DevKitC-32E / WROOM-32E, ECO3, 4 MiB target and reserved output pins.
+- [x] Pinned Xtensa compiler/tools, reproducible ELF/merged-image build and hashes.
+- [x] Boot-only serial heartbeat with motor pins static LOW after initialization.
+- [x] Host behavior tests, image integrity checks and emulated application startup.
+- [ ] Physical flash/boot log from the named board.
+- [ ] Pin measurements during power-up, reset, application startup and panic.
 
-- [ ] Versioned scenario files: seed, initial state, vehicle parameters, command
-      timeline, environment and fault schedule.
-- [ ] Headless scenario runner with JSON/CSV results and nonzero exit status
-      when an expected bound is exceeded.
-- [ ] Input record/replay tied to the scenario seed and configuration.
-- [ ] Numerical metrics: angle tracking error, overshoot, settling time, height
-      deviation, saturation duration and watchdog response.
-- [ ] Saved beginner examples for hover, roll/pitch steps, impulse recovery,
-      lost link and depleted battery.
+**Complete when:** someone can build and flash the documented image and record
+those measurements. It intentionally cannot arm or run a flight loop.
+See [firmware instructions](firmware/esp32-devkitc/README.md).
 
-**Complete when:** the same scenario and seed reproduce the same results, a
-contributor can run it without the UI, and a regression has a small sharable
-fixture. Existing safety tests must continue to pass.
+## 2. Real MPU6050 acquisition and ESC outputs · propellers removed
 
-## 2. Model fidelity and learning tools
+- [ ] Implement physical sensor identity, reset/configuration and fresh burst reads.
+- [ ] Verify mounting transforms and roll/pitch/yaw signs on the actual module.
+- [ ] Implement LEDC or another measured ESC peripheral output driver behind an
+      output inhibit; verify pulse width, update frequency, idle and motor order.
+- [ ] Fault tests for absent sensor, NACK, stuck bus, bad samples and output errors.
 
-**Problem:** the current constants are illustrative rather than measurements of
-a particular motor, propeller, battery and frame.
+The simulation fixture already exercises HAL I²C/ADC/LEDC against virtual devices;
+that is useful driver evidence, not a replacement for the physical measurements.
 
-- [ ] Validated vehicle configuration for mass, inertia, arm geometry, motor
-      response and measured thrust curves.
-- [ ] Sensor mounting transforms, vibration, gyro saturation, stale samples and
-      timing jitter with explicit units and deterministic seeds.
-- [ ] Plots of estimated attitude versus ground truth, rate targets, PID terms,
-      integrator state and actuator saturation.
-- [ ] More demanding tests for coupled-axis inputs, saturation recovery and
-      performance under wind/model mismatch.
-- [ ] Short practical tutorials connecting each equation to a visible response.
+## 3. Calibration, battery sensing, expiry and independent motor watchdog
 
-**Complete when:** configurations reject invalid physical values, fixtures
-explain the source of their parameters, and experiments expose model limits
-without using ground truth inside the ordinary attitude controller.
+- [ ] Motion-rejecting calibration, vibration filtering and adequate gyro range.
+- [ ] Verified voltage divider/filtering, ADC characterization and voltage policy.
+- [ ] Wi-Fi outside the stabilization loop with bounded newest-command handoff,
+      authentication/ownership, replay checks and local command timestamps.
+- [ ] Independent output inhibition on hung controller/network tasks, missed
+      deadlines, reset, brownout and emergency stop.
+- [ ] Worst-case loop jitter, sensor age and watchdog latency under Wi-Fi traffic.
 
-## 3. ESP32 bench firmware · propellers removed
+**Complete when:** fault injection stops outputs on the actual board even when
+flight code stops making progress. Host emulator guards do not meet this gate.
 
-**Problem:** portable control logic does not prove physical sensor I/O, output
-timing, power behavior or watchdog independence.
+## 4. Verified wiring, build/flash guide and repeatable bench evidence
 
-- [ ] Select and document one exact ESP32 chip, DevKit and supported toolchain.
-- [ ] Implement verified MPU6050 startup/configuration and fresh I²C samples.
-- [ ] Add calibrated battery sensing and a tested ESC output peripheral driver.
-- [ ] Keep Wi-Fi processing outside the stabilization deadline using a bounded
-      newest-command handoff.
-- [ ] Add independent output inhibition for watchdog/reset/boot and emergency
-      stop conditions.
-- [ ] Measure worst-case loop jitter, sensor age and missed deadlines under
-      Wi-Fi load; publish bench evidence.
+- [ ] Compatible motor/prop/ESC/battery/regulator/frame bill of materials.
+- [ ] Verified wiring/power diagrams for that exact build, not generic DevKit pins.
+- [ ] Propellers-off logs/scope captures covering startup, reset, order/signs,
+      timing, calibration, voltage, dropped commands and failsafe recovery.
+- [ ] A versioned hardware test report attached to the firmware revision.
 
-**Complete when:** a reproducible propellers-off procedure verifies sensor axes,
-motor order, pulse timing, timeout behavior, startup/reset inhibition and power
-boundaries on the named hardware. Simulator gains are not automatically approved
-for the physical frame. See [the port plan](docs/esp32-port.md).
+## 5. Restrained trials, then controlled flights
 
-## 4. Hardware-in-the-loop
+- [ ] Measure thrust/current, mass/inertia, vibration and controller response.
+- [ ] Retune using restrained tests; preserve separate simulation/hardware gains.
+- [ ] Select additional sensing if claiming height, heading or position behavior.
+- [ ] Define and validate an airborne failure policy within those sensing limits.
+- [ ] Document controlled flight results and unresolved failures before describing
+      a release as flight-ready. Motor cut does not guarantee a safe landing.
 
-- [ ] Run the actual ESP32 controller against virtual sensor samples and feed its
-      motor outputs back into the host physics model.
-- [ ] Make timing, sequence, units and transport limits explicit at the bridge.
-- [ ] Replay reference scenarios with bus failures, stale input, congestion and
-      missed deadlines.
-- [ ] Compare host and device traces with documented numerical/timing tolerances.
+## Simulation improvements alongside those gates
 
-**Complete when:** the firmware executes on a physical ESP32, virtual outputs
-drive only the simulation during the test, and the traces show the measured
-differences rather than assuming host results transfer to hardware.
+- Record/replay with seeded scenarios, headless runner and numerical regressions.
+- Measured vehicle configurations, sensor mounting/vibration/saturation models.
+- More guest firmware examples, MPU FIFO/interrupt behavior, verified MCPWM/DShot
+  adapters and explicit diagnostics for unsupported device operations.
+- Physical ESP32 hardware-in-the-loop: virtual sensor input and measured motor
+  output, with sequence/time/unit bounds and comparison to host/guest traces.
+- Controller protocol bridge for guest firmware; networking must have an explicit
+  contract rather than pretending arbitrary uploaded firmware understands joysticks.
+- Downloadable desktop builds and beginner tutorials with reproducible evidence.
 
-## 5. Additional sensing and a justified airborne failsafe
-
-- [ ] Choose suitable height sensing and characterize its noise, range, delay
-      and failure modes; assess absolute heading/position sensors separately.
-- [ ] Add a height/vertical-speed estimator without consulting simulation truth.
-- [ ] Specify which failures permit a controlled descent and which require a
-      different response, with explicit limits and a manual override.
-- [ ] Validate low-voltage behavior and estimator/sensor failures across the
-      supported operating range before any restrained hardware trial.
-
-**Complete when:** the sensing makes the claimed behavior observable and tests
-plus physical evidence support a narrowly defined policy. A quadcopter losing a
-motor may lack the authority needed for ordinary stabilized flight. The current
-motor-cut policy does **not** guarantee a safe landing.
-
-## Later, after those foundations
-
-- Cross-platform downloadable simulator builds and repeatable Android packaging.
-- A clearly isolated browser demo and searchable tutorials with recorded runs.
-- More complete touch controls, accessibility checks and controller layouts.
-- Optional ROS 2 or MAVLink interoperability with an explicit protocol contract.
-- Position hold and waypoint experiments only after suitable sensing and
-  validated estimator/control behavior.
-
-Camera/AI features and autonomous missions are lower priority than reproducible
-experiments, trustworthy timing and measurable control behavior.
-
-## Propose a change
-
-Use the [feature template](https://github.com/sumerchoudhary78/esp32-rust-drone-simulator/issues/new?template=feature_request.yml).
-State who benefits, the smallest useful change, how it will be measured, and
-whether it affects simulation or hardware. See [CONTRIBUTING.md](CONTRIBUTING.md).
+Camera/AI, missions, ROS 2/MAVLink and position hold follow measured control and
+appropriate sensing. See [CONTRIBUTING.md](CONTRIBUTING.md) to propose a focused change.

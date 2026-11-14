@@ -1,4 +1,5 @@
 import { createScene } from "./scene.js";
+import { createWorkbench } from "./workbench.js";
 const $ = (id) => document.getElementById(id);
 const pilot = { throttle: 0, roll: 0, pitch: 0, yaw: 0, arm: false };
 let socket,
@@ -13,6 +14,7 @@ let socket,
 let suspended = false,
   resetAfterEvent = null;
 let scene;
+const workbench = createWorkbench({ send, notice });
 try {
   scene = createScene($("viewport"));
 } catch (error) {
@@ -26,7 +28,7 @@ const names = {
   ],
   hardware: [
     "Virtual hardware",
-    "One connected system. Every component accounted for.",
+    "Assemble the electronics. Connect the pins. Execute your firmware.",
   ],
   tuning: [
     "Control tuning",
@@ -171,6 +173,7 @@ function connect() {
       if (samples.length > 6000) samples.shift();
       scene?.update(message);
       render(message);
+      workbench.update(message);
       drawChart();
     }
   });
@@ -234,6 +237,7 @@ function syncSetting(id, value) {
   if (document.activeElement !== $(id)) $(id).value = value;
 }
 function render(t) {
+  const guest = t.workbench?.driver === "firmware";
   number("altitude", t.position_m.z, 2);
   number("battery", t.battery_voltage, 2);
   $("battery-pct").textContent = `${Math.round(t.battery_percent)}%`;
@@ -259,8 +263,11 @@ function render(t) {
   number("pitch", t.attitude_deg.y);
   number("yaw", t.attitude_deg.z);
   $("sim-time").textContent = formatTime(t.sim_time_s);
-  $("state-badge").textContent =
-    t.state === "armed"
+  $("state-badge").textContent = guest
+    ? t.workbench.firmware.running
+      ? "FIRMWARE RUNNING"
+      : "FIRMWARE STOPPED"
+    : t.state === "armed"
       ? t.phase === "flying"
         ? "IN FLIGHT"
         : t.phase === "landing"
@@ -328,6 +335,10 @@ function render(t) {
   const vec = (v) => `${v.x.toFixed(3)}, ${v.y.toFixed(3)}, ${v.z.toFixed(3)}`;
   $("imu-accel").textContent = vec(t.imu.accel);
   $("imu-gyro").textContent = vec(t.imu.gyro);
+  if (!t.workbench?.validation.wiring.imu_powered || t.faults.imu_failure) {
+    for (const id of ["imu-temp", "imu-accel", "imu-gyro"])
+      $(id).textContent = "Unavailable";
+  }
   syncSetting("target-height", t.settings.target_altitude);
   $("target-height-output").textContent =
     `${Number($("target-height").value).toFixed(1)} m`;
@@ -354,6 +365,23 @@ function render(t) {
       ? "Small inputs are enough. Space cuts all motors."
       : "Arm at zero throttle, then select Take off."
     : "Observer mode. Take control to use these sticks.";
+  if (guest) {
+    for (const id of [
+      "arm",
+      "takeoff",
+      "land",
+      "throttle",
+      "altitude-assist",
+      "target-height",
+      "disturb",
+      "apply-pid",
+      "default-pid",
+    ])
+      $(id).disabled = true;
+    $("calibration-label").textContent = "GUEST";
+    $("controller-hint").textContent =
+      "Firmware owns the motors. Use its UART protocol in Virtual hardware.";
+  }
   if (t.state === "failsafe") {
     $("notice").hidden = false;
     $("notice").classList.add("danger");
@@ -467,11 +495,7 @@ function updateStickPositions() {
     $(`${axis}-range`).value = pilot[axis];
 }
 document.addEventListener("keydown", (e) => {
-  if (
-    ["INPUT", "TEXTAREA", "SELECT"].includes(e.target.tagName) &&
-    e.code !== "Space"
-  )
-    return;
+  if (["INPUT", "TEXTAREA", "SELECT"].includes(e.target.tagName)) return;
   if (e.code === "Space") {
     if (owner && !e.repeat) {
       e.preventDefault();
@@ -583,17 +607,15 @@ $("environment-form").addEventListener("submit", (e) => {
     wind: Number($("wind-setting").value),
   });
 });
-document
-  .querySelectorAll("[data-fault]")
-  .forEach((input) =>
-    input.addEventListener("change", () =>
-      send({
-        type: "fault",
-        fault: input.dataset.fault,
-        enabled: input.checked,
-      }),
-    ),
-  );
+document.querySelectorAll("[data-fault]").forEach((input) =>
+  input.addEventListener("change", () =>
+    send({
+      type: "fault",
+      fault: input.dataset.fault,
+      enabled: input.checked,
+    }),
+  ),
+);
 $("export").addEventListener("click", () => {
   if (!samples.length) {
     notice("No telemetry captured yet. Connect to the simulator first.");

@@ -22,6 +22,48 @@ async function until(predicate, timeout = 4000) {
 }
 const send = (value) => client.send(JSON.stringify(value));
 const action = (name) => send({ type: "action", action: name });
+test("workbench catalog and net validation expose real connectivity without applying it", async () => {
+  const catalog = await (await fetch(`${base}/api/workbench`)).json();
+  assert.equal(catalog.preset.devices.length, 13);
+  assert.equal(catalog.catalog.find((d) => d.kind === "esp32").pins.length, 38);
+  const request = async (circuit) =>
+    await fetch(`${base}/api/circuit/validate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(circuit),
+    });
+  const valid = await (await request(catalog.preset)).json();
+  assert.equal(valid.flight_connected, true);
+  catalog.preset.wires.push({
+    from: { device: "battery", pin: "+" },
+    to: { device: "battery", pin: "-" },
+  });
+  const invalid = await (await request(catalog.preset)).json();
+  assert.equal(invalid.valid, false);
+  assert.ok(invalid.errors.some((e) => e.includes("Short circuit")));
+  assert.equal(
+    (await (await fetch(`${base}/api/telemetry`)).json()).workbench.validation
+      .flight_connected,
+    true,
+  );
+});
+test("firmware preparation rejects cross-origin writes and invalid images", async () => {
+  const response = await fetch(`${base}/api/firmware?name=wrong.bin`, {
+    method: "POST",
+    headers: { "Content-Type": "application/octet-stream" },
+    body: Buffer.alloc(48),
+  });
+  assert.equal(response.status, 400);
+  const forbidden = await fetch(`${base}/api/firmware?name=wrong.bin`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/octet-stream",
+      Origin: "https://example.invalid",
+    },
+    body: Buffer.alloc(48),
+  });
+  assert.equal(forbidden.status, 403);
+});
 async function reset() {
   command.arm = false;
   command.throttle = 0;

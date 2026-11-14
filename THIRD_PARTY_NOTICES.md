@@ -12,6 +12,16 @@ source retains its upstream headers.
 
 Upstream: <https://github.com/mrdoob/three.js>.
 
+## Flexe (optional CPU emulator)
+
+The workbench adapter builds against [Flexe](https://github.com/levkropp/flexe),
+MIT licensed, copyright 2026 Lev Kropp. The exact source commit and archive hash
+are pinned in `scripts/setup_emulator.py`; its complete MIT notice is retained in
+[`emulation/flexe/UPSTREAM-LICENSE.txt`](emulation/flexe/UPSTREAM-LICENSE.txt).
+The downloaded source and compiled backend stay in ignored `output/`. Aerolab's
+board adapter supplies the MPU6050, circuit routing, UART and ADC/PWM boundaries;
+instruction execution and on-chip peripheral models come from Flexe.
+
 ## Slint and other Cargo/npm dependencies
 
 The optional native controller uses Slint 1.18.1. Slint is subject to its own

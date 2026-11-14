@@ -524,140 +524,210 @@
             class="page"
             aria-label="Virtual hardware"
           >
-            <div class="hardware-intro">
-              <span class="tag">SYSTEM ARCHITECTURE</span>
-              <h2>The entire loop, on your desk.</h2>
-              <p>
-                Follow a command from your phone to the motors, then back
-                through the IMU. Every value below comes from the running Rust
-                simulation.
-              </p>
-            </div>
-            <div class="hardware-flow card">
-              <div class="hardware-node">
-                <svg><use href="#i-wifi" /></svg><b>Android / browser</b
-                ><small>Joysticks · 50 Hz commands</small>
-              </div>
-              <span class="flow-arrow">→<small>Wi-Fi model</small></span>
-              <div class="hardware-node main-node">
-                <svg><use href="#i-chip" /></svg><b>ESP32 flight core</b
-                ><small>Fusion → PID → X mixer · 500 Hz</small>
-              </div>
-              <span class="flow-arrow">→<small>PWM model</small></span>
-              <div class="hardware-node">
-                <svg><use href="#i-drone" /></svg><b>4 ESCs + motors</b
-                ><small>Rigid-body quadcopter model</small>
-              </div>
-            </div>
-            <div class="hardware-grid">
-              <article class="card detail-card">
-                <span class="section-kicker">SENSING</span>
-                <h2>MPU6050 · virtual I²C</h2>
+            <div class="workbench-heading">
+              <div>
+                <span class="tag">DEVICE WORKBENCH</span>
+                <h2>Build the circuit. Run your firmware.</h2>
                 <p>
-                  14-byte register samples pass through the same Rust decoder
-                  intended for a physical sensor.
+                  Connect the pins, inspect the devices, and feed their outputs
+                  into the 3D flight model.
                 </p>
-                <dl>
-                  <div>
-                    <dt>Address / bus</dt>
-                    <dd>0x68 / I²C</dd>
-                  </div>
-                  <div>
-                    <dt>Accelerometer / gyro</dt>
-                    <dd>±2 g / ±250°/s</dd>
-                  </div>
-                  <div>
-                    <dt>Suggested SDA / SCL</dt>
-                    <dd>GPIO 21 / 22</dd>
-                  </div>
-                  <div>
-                    <dt>Temperature</dt>
-                    <dd id="imu-temp">32.0 °C</dd>
-                  </div>
-                  <div>
-                    <dt>Acceleration (m/s²)</dt>
-                    <dd id="imu-accel">—</dd>
-                  </div>
-                  <div>
-                    <dt>Gyro (rad/s)</dt>
-                    <dd id="imu-gyro">—</dd>
-                  </div>
-                </dl>
-              </article>
-              <article class="card detail-card">
-                <span class="section-kicker">ACTUATION</span>
-                <h2>Four motors. One mixer.</h2>
-                <div class="motor-map">
-                  <span class="front-label">↑ FRONT (+X)</span>
-                  <div>
-                    <b>M1 <small>FL · CW</small><code>GPIO 25</code></b
-                    ><b>M2 <small>FR · CCW</small><code>GPIO 26</code></b>
-                  </div>
-                  <div class="frame-x">╳</div>
-                  <div>
-                    <b>M4 <small>RL · CCW</small><code>GPIO 14</code></b
-                    ><b>M3 <small>RR · CW</small><code>GPIO 27</code></b>
-                  </div>
+              </div>
+              <span id="driver-status" class="connection-pill"
+                >Built-in Rust controller</span
+              >
+            </div>
+            <div class="workbench-toolbar card">
+              <button class="button light" id="preset-circuit">
+                F450 reference build</button
+              ><button class="button light" id="new-circuit">
+                Empty workspace</button
+              ><button class="button light" id="undo-circuit">Undo</button
+              ><button class="button light" id="export-circuit">
+                Export circuit</button
+              ><label class="button light file-button"
+                >Import circuit<input
+                  id="import-circuit"
+                  type="file"
+                  accept=".json,application/json" /></label
+              ><button class="button light" id="restore-circuit" hidden>
+                Restore saved draft</button
+              ><button class="button primary" id="apply-circuit">
+                Apply circuit · stops motors
+              </button>
+            </div>
+            <div class="workbench-layout">
+              <div class="workbench-main">
+                <button
+                  class="text-button"
+                  id="zoom-circuit"
+                  aria-pressed="false"
+                >
+                  View full size
+                </button>
+                <div class="device-palette" aria-label="Add virtual device">
+                  <span>ADD DEVICE</span
+                  ><button data-add-device="esp32">+ ESP32</button
+                  ><button data-add-device="mpu6050">+ MPU6050</button
+                  ><button data-add-device="esc">+ ESC</button
+                  ><button data-add-device="motor">+ Motor</button
+                  ><button data-add-device="battery">+ Battery</button
+                  ><button data-add-device="regulator">+ Regulator</button
+                  ><button data-add-device="divider">+ Divider</button>
                 </div>
-                <p>
-                  Viewed from above. Suggested pins are a future adapter plan;
-                  this app emits no electrical signals.
-                </p>
-              </article>
-              <article class="card detail-card">
-                <span class="section-kicker">POWER MODEL</span>
-                <h2>3S battery → distribution</h2>
-                <dl>
-                  <div>
-                    <dt>Battery</dt>
-                    <dd>12.6 V full · 3S</dd>
-                  </div>
-                  <div>
-                    <dt>Arm gate / motor cut</dt>
-                    <dd>10.8 V / 10.2 V</dd>
-                  </div>
-                  <div>
-                    <dt>Virtual frame mass</dt>
-                    <dd>1.2 kg</dd>
-                  </div>
-                  <div>
-                    <dt>Maximum thrust</dt>
-                    <dd>6.5 N per motor</dd>
-                  </div>
-                  <div>
-                    <dt>Motor response</dt>
-                    <dd>45 ms time constant</dd>
-                  </div>
-                  <div>
-                    <dt>Flight controller</dt>
-                    <dd>One ESP32 · no Pixhawk</dd>
-                  </div>
-                </dl>
-                <p>
-                  Not a verified bill of materials. Motor, propeller, ESC and
-                  battery values must be measured before hardware tuning.
-                </p>
-              </article>
-              <article class="card detail-card power-notes">
-                <span class="section-kicker">PHYSICAL BUILD BOUNDARY</span>
-                <h2>A model, not an electrical emulator.</h2>
-                <p>
-                  The host executes Rust flight logic and approximate physics.
-                  It does not emulate ESP32 instructions, RF, real I²C timing,
-                  ESC startup or power faults.
-                </p>
-                <p>
-                  Future wiring: battery → power distribution → four ESCs; a
-                  regulated 5 V supply for the board; a verified 3.3 V sensor
-                  rail and a common signal ground. Confirm your exact boards and
-                  their pin ratings first.
-                </p>
-                <p>
-                  The MPU6050 provides neither altitude nor absolute yaw. Height
-                  assistance in this lab uses simulated ground truth.
-                </p>
-              </article>
+                <div class="circuit-scroll card">
+                  <svg
+                    id="circuit-canvas"
+                    viewBox="0 0 1240 900"
+                    role="group"
+                    aria-label="Interactive quadcopter circuit assembly"
+                  >
+                    <defs>
+                      <pattern
+                        id="circuit-grid"
+                        width="20"
+                        height="20"
+                        patternUnits="userSpaceOnUse"
+                      >
+                        <circle cx="1" cy="1" r=".8" fill="#cfd9d3" />
+                      </pattern>
+                    </defs>
+                    <rect width="1240" height="900" fill="url(#circuit-grid)" />
+                    <g id="circuit-wires"></g>
+                    <g id="circuit-devices"></g>
+                  </svg>
+                </div>
+                <div class="circuit-footer">
+                  <span id="pin-hint"
+                    >Click two pins to wire. Drag a device to move it. Click a
+                    wire to remove it.</span
+                  ><b id="wire-count">13 devices</b>
+                </div>
+                <div class="wire-legend">
+                  <span class="vbat">Battery +</span
+                  ><span class="ground">Ground</span
+                  ><span class="five">5 V</span><span class="three">3.3 V</span
+                  ><span class="sda">SDA</span><span class="scl">SCL</span
+                  ><span class="pwm">PWM</span>
+                </div>
+              </div>
+              <aside class="workbench-inspector">
+                <article class="card detail-card">
+                  <span class="section-kicker">CONNECTIVITY</span>
+                  <h3 id="circuit-result">Checking circuit…</h3>
+                  <p id="circuit-dirty">
+                    Applied circuit · changes stop motors
+                  </p>
+                  <ul id="circuit-validation" class="validation-list"></ul>
+                </article>
+                <article class="card detail-card">
+                  <span class="section-kicker">COMPONENT INSPECTOR</span>
+                  <h3 id="device-inspector-title">Select a device</h3>
+                  <p id="device-inspector-description">
+                    Choose a component to inspect its model.
+                  </p>
+                  <button class="text-button" id="remove-device" disabled>
+                    Remove selected device
+                  </button>
+                </article>
+                <article class="card detail-card">
+                  <span class="section-kicker">LIVE DEVICES</span>
+                  <div id="device-live"></div>
+                  <dl>
+                    <div>
+                      <dt>Battery</dt>
+                      <dd>3S · 12.6 V full</dd>
+                    </div>
+                    <div>
+                      <dt>Temperature</dt>
+                      <dd id="imu-temp">32 °C</dd>
+                    </div>
+                    <div>
+                      <dt>Accel · m/s²</dt>
+                      <dd id="imu-accel">—</dd>
+                    </div>
+                    <div>
+                      <dt>Gyro · rad/s</dt>
+                      <dd id="imu-gyro">—</dd>
+                    </div>
+                  </dl>
+                </article>
+              </aside>
             </div>
+            <section
+              class="card firmware-panel"
+              aria-label="Your ESP32 firmware"
+            >
+              <div class="firmware-heading">
+                <div>
+                  <span class="section-kicker">YOUR CODE, VIRTUAL DEVICES</span>
+                  <h2>Run compiled ESP32 firmware.</h2>
+                  <p id="emulator-availability">
+                    Checking optional CPU backend…
+                  </p>
+                </div>
+                <span class="tag">XTENSA LX6 · 4 MiB</span>
+              </div>
+              <p>
+                The optional Flexe backend executes classic ESP32 instructions
+                and connects I²C, PWM, ADC1 and UART0 to this assembly. Firmware
+                controls its own motors; browser flight helpers apply to the
+                built-in controller.
+              </p>
+              <div class="firmware-actions">
+                <label class="button light file-button"
+                  >Choose .elf / .bin<input
+                    id="firmware-file"
+                    type="file"
+                    accept=".elf,.bin" /></label
+                ><span id="firmware-upload-status">No firmware selected</span
+                ><button class="button primary" id="start-firmware" disabled>
+                  Start firmware</button
+                ><button class="button light" id="stop-firmware" disabled>
+                  Stop firmware</button
+                ><button class="button light" id="builtin-firmware" disabled>
+                  Use built-in controller
+                </button>
+              </div>
+              <p id="firmware-state" role="status">
+                Choose an image to execute your own firmware on the virtual
+                ESP32.
+              </p>
+              <div class="cpu-metrics">
+                <span>CPU cycles <b id="cpu-cycles">0</b></span
+                ><span>Guest time <b id="cpu-time">0.000 s</b></span
+                ><span>MPU6050 <b id="i2c-count">0 transfers</b></span>
+              </div>
+              <pre
+                id="uart-output"
+                class="uart-output"
+                aria-label="ESP32 UART console"
+              >
+UART0 output will appear here.</pre>
+              <form id="uart-form">
+                <label for="uart-input">UART0 input</label
+                ><input
+                  id="uart-input"
+                  type="text"
+                  maxlength="254"
+                  placeholder="Your firmware's serial command"
+                  autocomplete="off"
+                /><button class="button light" type="submit">Send</button>
+              </form>
+              <div class="fixture-actions">
+                <span>Simulation fixture only:</span
+                ><button data-uart="0">1000 µs</button
+                ><button data-uart="5">1500 µs</button
+                ><button data-uart="7">1700 µs</button>
+              </div>
+              <p class="model-boundary">
+                Functional device models and approximate thrust/battery
+                behavior. No RF, electrical transients, brushless commutation or
+                cycle-accurate timing. Use firmware you trust with this local
+                native emulator. Match A → A, B → B, C → C for the fixed
+                propeller directions.
+              </p>
+            </section>
           </section>
           <section id="page-tuning" class="page" aria-label="Control tuning">
             <div class="settings-grid">
