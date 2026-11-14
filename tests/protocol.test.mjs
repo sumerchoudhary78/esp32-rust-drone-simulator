@@ -48,6 +48,26 @@ test("workbench catalog and net validation expose real connectivity without appl
   );
 });
 test("firmware preparation rejects cross-origin writes and invalid images", async () => {
+  const rebinding = await new Promise((resolve, reject) => {
+    const request = http.request(
+      `${base}/api/firmware?name=wrong.bin`,
+      {
+        method: "POST",
+        headers: {
+          Host: "attacker.invalid:8791",
+          Origin: "http://attacker.invalid:8791",
+          "Content-Type": "application/octet-stream",
+        },
+      },
+      (response) => {
+        response.resume();
+        resolve(response.statusCode);
+      },
+    );
+    request.on("error", reject);
+    request.end(Buffer.alloc(48));
+  });
+  assert.equal(rebinding, 403);
   const response = await fetch(`${base}/api/firmware?name=wrong.bin`, {
     method: "POST",
     headers: { "Content-Type": "application/octet-stream" },

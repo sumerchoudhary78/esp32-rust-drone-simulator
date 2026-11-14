@@ -234,7 +234,14 @@ async fn upload_firmware(
     Query(query): Query<UploadQuery>,
     body: Bytes,
 ) -> Response {
-    if !peer.ip().is_loopback() {
+    let local_host = headers
+        .get(header::HOST)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse::<axum::http::uri::Authority>().ok())
+        .is_some_and(|a| {
+            ["localhost", "127.0.0.1", "[::1]"].contains(&a.host().to_ascii_lowercase().as_str())
+        });
+    if !peer.ip().is_loopback() || !local_host {
         return (
             StatusCode::FORBIDDEN,
             "Choose firmware from the computer running Aerolab (localhost)",
