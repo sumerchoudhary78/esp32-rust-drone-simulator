@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Offline checks for the milestone-1 classic ESP32 ELF and merged flash image.
+"""Offline ESP32 image integrity and linked bench-watchdog placement checks.
 
 Image format: https://docs.espressif.com/projects/esptool/en/latest/esp32/advanced-topics/firmware-image-format.html
 Checksums detect corruption; they do not provide secure-boot authentication.
@@ -19,6 +19,35 @@ APP_OFFSET = 0x10000
 def require(condition, message):
     if not condition:
         raise ValueError(message)
+
+
+def watchdog_iram_address(elf):
+    """Check the linked bench ISR, independently of its source attributes.
+
+    This is a build-time ELF symbol check, not an emulator firmware hook.
+    It establishes placement only; physical response still needs measurement.
+    """
+    require(len(elf) >= 52, "Truncated ELF header")
+    start = struct.unpack_from("<I", elf, 32)[0]
+    width, count = struct.unpack_from("<HH", elf, 46)
+    require(width == 40 and count > 0 and start + width * count <= len(elf), "Invalid ELF section table")
+    sections = [struct.unpack_from("<10I", elf, start + i * width) for i in range(count)]
+    addresses = []
+    for section in sections:
+        if section[1] != 2:  # SHT_SYMTAB
+            continue
+        require(section[6] < count and section[9] == 16, "Invalid ELF symbol table")
+        names = sections[section[6]]
+        require(names[4] + names[5] <= len(elf) and section[4] + section[5] <= len(elf), "Truncated ELF symbols")
+        strings = elf[names[4]:names[4] + names[5]]
+        for offset in range(section[4], section[4] + section[5], 16):
+            name, address = struct.unpack_from("<II", elf, offset)
+            require(name < len(strings), "Invalid ELF symbol name")
+            if b"__esp_hal_internal_motor_watchdog" in strings[name:].split(b"\0", 1)[0]:
+                addresses.append(address)
+    require(len(addresses) == 1, "Expected one linked motor-watchdog ISR")
+    require(0x40080000 <= addresses[0] < 0x400A0000, "Motor-watchdog ISR must be in IRAM, not flash")
+    return addresses[0]
 
 
 def parse_image(data, offset):
@@ -86,9 +115,7 @@ def verify(elf_data, image):
         "board": "ESP32-DevKitC-32E",
         "chip": "esp32",
         "target": "xtensa-esp32-none-elf",
-        "milestone": 1,
-        "mode": "boot_only_motor_inhibited",
-        "flash_bytes": FLASH_BYTES,
+                "flash_bytes": FLASH_BYTES,
         "merged_flash_offset": "0x0",
         "bootloader_offset": hex(BOOTLOADER_OFFSET),
         "application_offset": hex(APP_OFFSET),
@@ -96,8 +123,6 @@ def verify(elf_data, image):
         "partitions": entries,
         "validation": ["Xtensa ELF", "ESP32 image headers", "segment checksums", "image SHA-256", "partition MD5", "matching application entry"],
         "hardware_boot_test_included": False,
-        "motor_policy": "GPIO25/26/27/14 static LOW after application initialization; no PWM",
-        "motor_policy_source": "firmware/esp32-devkitc/src/main.rs; behavior is not inferred by the image parser",
     }
 
 
@@ -106,11 +131,17 @@ def main():
     parser.add_argument("--elf", type=Path, required=True)
     parser.add_argument("--image", type=Path, required=True)
     parser.add_argument("--manifest", type=Path)
+    parser.add_argument("--firmware-kind", choices=["unknown", "boot-only"], default="unknown")
     args = parser.parse_args()
     try:
         result = verify(args.elf.read_bytes(), args.image.read_bytes())
     except (ValueError, OSError, struct.error) as error:
         parser.exit(1, f"Firmware image verification failed: {error}\n")
+    # Image checks establish structural integrity, not motor behavior.
+    if args.firmware_kind == "boot-only":
+        result.update(milestone=1, mode="boot_only_motor_inhibited",
+            motor_policy="GPIO25/26/27/14 static LOW after application initialization; no PWM",
+            motor_policy_source="firmware/esp32-devkitc/src/main.rs; build-supplied label, not inferred from image bytes")
     if args.manifest:
         args.manifest.write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result, indent=2))

@@ -66,20 +66,26 @@ jobs:
       - name: Install native emulator prerequisites
         run: sudo apt-get update && sudo apt-get install -y build-essential cmake libssl-dev zlib1g-dev python3
       - name: Install stable Rust for the host
-        run: rustup toolchain install stable --profile minimal && rustup default stable
+        run: rustup toolchain install stable --profile minimal --component rustfmt,clippy && rustup default stable
       - name: Install pinned Xtensa tools
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: python3 scripts/esp32_firmware.py setup
-      - name: Check boot-only behavior and build flash artifacts
+      - name: Check controller behavior and build all firmware variants
         run: |
+          rustup run stable cargo fmt --manifest-path firmware/esp32-devkitc/Cargo.toml -- --check
+          python3 scripts/esp32_firmware.py lint
           python3 scripts/esp32_firmware.py test
           python3 scripts/esp32_firmware.py build
           python3 scripts/esp32_firmware.py build-fixture
+          python3 scripts/esp32_firmware.py init-profile
+          python3 scripts/esp32_firmware.py build-bench --profile output/firmware-config/device.json
+          python3 scripts/esp32_firmware.py build-bench --profile output/firmware-config/device.json --wifi
+          python3 scripts/esp32_firmware.py build-bench --emulated --fault-injection
       - name: Build the pinned functional CPU backend
         run: python3 scripts/setup_emulator.py
       - name: Check image integrity and actual guest peripheral behavior
-        run: python3 -m unittest discover -s tests -p '*_test.py' -v
+        run: AEROLAB_REQUIRE_EMULATOR=1 python3 -m unittest discover -s tests -p '*_test.py' -v
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
@@ -92,10 +98,14 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: esp32-boot-only-and-simulation-fixture
+          name: esp32-bootstrap-emulated-controller-and-bench-evidence
+          # Physical controller binaries contain secrets; retain their manifests only.
           path: |
             output/firmware/esp32-devkitc-m1/
             output/firmware/simulation-fixture/
+            output/firmware/flight-bench-emulated/
+            output/firmware/flight-bench/manifest.json
+            output/firmware/flight-bench-wifi/manifest.json
             output/device-workbench-*.png
             test-results/
           if-no-files-found: warn

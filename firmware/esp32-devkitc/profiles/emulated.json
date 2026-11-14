@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "mode": "emulated",
+  "psk_hex": "4242424242424242424242424242424242424242424242424242424242424242",
+  "max_pwm_us": 1150,
+  "esc_hz": 50,
+  "battery_calibration": {
+    "raw_low": 2400,
+    "volts_low": 9.0,
+    "raw_high": 3360,
+    "volts_high": 12.6
+  },
+  "wifi_ssid": "Aerolab-ESP32",
+  "wifi_password": ""
+}

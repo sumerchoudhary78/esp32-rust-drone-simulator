@@ -1,6 +1,6 @@
 # ESP32 Rust Drone roadmap
 
-The next deliverable is a measured ESP32 bench controller. Simulation supports
+The real ESP32 bench-controller software is implemented; the next gate is physical measurement. Simulation supports
 that work; it does not establish physical flight readiness. No dates are promised.
 
 ## Available now
@@ -32,23 +32,27 @@ See [firmware instructions](firmware/esp32-devkitc/README.md).
 
 ## 2. Real MPU6050 acquisition and ESC outputs · propellers removed
 
-- [ ] Implement physical sensor identity, reset/configuration and fresh burst reads.
+- [x] Implement physical sensor identity, reset/configuration/readback and fresh burst reads.
 - [ ] Verify mounting transforms and roll/pitch/yaw signs on the actual module.
-- [ ] Implement LEDC or another measured ESC peripheral output driver behind an
-      output inhibit; verify pulse width, update frequency, idle and motor order.
-- [ ] Fault tests for absent sensor, NACK, stuck bus, bad samples and output errors.
+- [x] Implement four-channel LEDC behind an external GPIO32 output inhibit.
+- [ ] Measure pulse width, update frequency, idle and motor order on actual ESCs.
+- [x] Automated sensor identity/readback/NACK/stale/saturation and guest disconnect tests.
+- [ ] Physical stuck-bus, output-error and signal-loss fault measurements.
 
-The simulation fixture already exercises HAL I²C/ADC/LEDC against virtual devices;
-that is useful driver evidence, not a replacement for the physical measurements.
+The actual dual-core controller binary exercises calibration, authenticated arming,
+PID/LEDC, ADC, link/sensor/battery faults and an independent ISR in the emulator.
+Physical measurements remain a separate gate. See the [bench guide](docs/physical-bench.md).
 
 ## 3. Calibration, battery sensing, expiry and independent motor watchdog
 
-- [ ] Motion-rejecting calibration, vibration filtering and adequate gyro range.
+- [x] Motion-rejecting calibration, 98 Hz gyro DLPF and ±2000°/s / ±8 g decoding.
+- [ ] Measure stationary variance and vibration with the actual mounting.
 - [ ] Verified voltage divider/filtering, ADC characterization and voltage policy.
-- [ ] Wi-Fi outside the stabilization loop with bounded newest-command handoff,
-      authentication/ownership, replay checks and local command timestamps.
-- [ ] Independent output inhibition on hung controller/network tasks, missed
-      deadlines, reset, brownout and emergency stop.
+- [x] Separate-core WPA2/UDP + UART, bounded atomic newest-command handoff,
+      HMAC/session/replay checks and local command timestamps; one PSK command producer.
+- [x] Implement timer ISR inhibition, 40 ms MWDT fallback, physical interlock,
+      deadline checks, 250 ms expiry and sticky emergency stop.
+- [ ] Measure actual inhibition through hangs, reset, brownout and emergency stop.
 - [ ] Worst-case loop jitter, sensor age and watchdog latency under Wi-Fi traffic.
 
 **Complete when:** fault injection stops outputs on the actual board even when
@@ -57,7 +61,8 @@ flight code stops making progress. Host emulator guards do not meet this gate.
 ## 4. Verified wiring, build/flash guide and repeatable bench evidence
 
 - [ ] Compatible motor/prop/ESC/battery/regulator/frame bill of materials.
-- [ ] Verified wiring/power diagrams for that exact build, not generic DevKit pins.
+- [x] Exact-pin wiring reference, private build profiles, flash/console/calibration tools.
+- [ ] Physically verify wiring and power delivery for the assembled build.
 - [ ] Propellers-off logs/scope captures covering startup, reset, order/signs,
       timing, calibration, voltage, dropped commands and failsafe recovery.
 - [ ] A versioned hardware test report attached to the firmware revision.

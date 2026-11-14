@@ -1,6 +1,6 @@
 /* Aerolab functional board adapter for Flexe. MIT; see THIRD_PARTY_NOTICES.
  * No network or host filesystem devices are exposed by this adapter.
- * stdin: dt_us ax ay az gx gy gz adc powered uart_hex (one bounded line)
+ * stdin: dt_us ax ay az gx gy gz adc powered uart_hex [arm_gpio13]
  * stdout: one JSON reply per step. Library diagnostics go to stderr.
  */
 #define _POSIX_C_SOURCE 200809L
@@ -15,7 +15,10 @@
 volatile int emu_app_running = 1;
 typedef struct {
     flexe_session_t *session;
-    mmio_handler_t efuse, syscon;
+    mmio_handler_t efuse, syscon, dport, timg[2];
+    uint32_t timg_ena[2];
+    uint32_t app_ctrl[4], app_cache;
+    bool app_started;
     uint8_t regs[128], cursor;
     int sda, scl, address, adc_channel, powered;
     float accel[3], gyro[3];
@@ -47,6 +50,57 @@ static void forward_write(mmio_handler_t *h, uint32_t addr, uint32_t val) {
 }
 static void efuse_write(void *ctx, uint32_t a, uint32_t v) { forward_write(&((board_t *)ctx)->efuse, a, v); }
 static void syscon_write(void *ctx, uint32_t a, uint32_t v) { forward_write(&((board_t *)ctx)->syscon, a, v); }
+/* Classic ESP32's APP boot address is DPORT+0x38. Upstream currently handles
+ * IDF's ROM boot service but not esp-hal's direct register handoff. The cache
+ * is coherent in this functional model, so a requested flush completes here.
+ * Firmware still executes its real startup and both CPU instruction streams. */
+static uint32_t dport_read(void *ctx, uint32_t addr) {
+    board_t *b=ctx;
+    if(addr>=0x3ff0002c && addr<=0x3ff00038) return b->app_ctrl[(addr-0x3ff0002c)/4];
+    if(addr==0x3ff00058) return b->app_cache | (1u<<5);
+    /* HAL's level-IRQ dispatcher reads the DPORT peripheral-source status
+     * mirrors before choosing the guest ISR. Upstream routes the CPU line
+     * but currently returns zero for these classic ESP32 mirrors. */
+    if(addr>=0x3ff000ec && addr<0x3ff00104) {
+        unsigned first=((addr-(addr>=0x3ff000f8?0x3ff000f8:0x3ff000ec))/4)*32;
+        uint32_t value=0;
+        for(unsigned bit=0;bit<32 && first+bit<69;bit++)
+            if(periph_interrupt_pending(flexe_session_periph(b->session),(int)(first+bit))) value|=1u<<bit;
+        return value;
+    }
+    return b->dport.read ? b->dport.read(b->dport.ctx,addr) : 0;
+}
+static void dport_write(void *ctx,uint32_t addr,uint32_t value) {
+    board_t *b=ctx;
+    if(addr==0x3ff00058) {b->app_cache=value;return;}
+    if(addr>=0x3ff0002c && addr<=0x3ff00038) {
+        b->app_ctrl[(addr-0x3ff0002c)/4]=value;
+        if(!b->app_started && b->app_ctrl[3] && (b->app_ctrl[1]&1) && !(b->app_ctrl[2]&1) && !(b->app_ctrl[0]&1)) {
+            xtensa_cpu_t *app=flexe_session_cpu(b->session,1);
+            app->pc=b->app_ctrl[3];app->running=true;b->app_started=true;
+            forward_write(&b->dport,0x3ff0002c,1); /* upstream release latch */
+        }
+        return;
+    }
+    forward_write(&b->dport,addr,value);
+}
+/* esp-hal deliberately uses LEVEL_INT_EN on classic ESP32: INT_ENA does not
+ * gate T0/T1 IRQs on this chip. Compensate for the upstream model's extra gate.
+ * The hardware prescaler also treats encodings 1 and 2 identically (divide 2).
+ * Neither correction observes firmware symbols or manufactures an ISR call. */
+static uint32_t timg_read(void *ctx,uint32_t addr) {
+    board_t *b=ctx;unsigned group=addr>=0x3ff60000;uint32_t base=group?0x3ff60000:0x3ff5f000;
+    return addr-base==0x98 ? b->timg_ena[group] : b->timg[group].read(b->timg[group].ctx,addr);
+}
+static void timg_write(void *ctx,uint32_t addr,uint32_t value) {
+    board_t *b=ctx;unsigned group=addr>=0x3ff60000;uint32_t base=group?0x3ff60000:0x3ff5f000;uint32_t off=addr-base;
+    /* TimerGroup initialization may have reset the upstream register file
+     * since attach. Restore its internal IRQ gate at each hardware write. */
+    if(off!=0x98) forward_write(&b->timg[group],base+0x98,b->timg_ena[group]|3);
+    if(off==0x98) {b->timg_ena[group]=value;value|=3;}
+    if((off==0 || off==0x24) && ((value>>13)&0xffff)==1) value=(value&~(0xffffu<<13))|(2u<<13);
+    forward_write(&b->timg[group],addr,value);
+}
 static void uart(void *ctx, uint8_t byte) {
     board_t *b = ctx;
     if (b->uart_len < sizeof(b->uart)) b->uart[b->uart_len++] = byte;
@@ -116,8 +170,18 @@ static void attach(board_t *b) {
     mem_write32(m, 0x3ff000c0, mem_read32(m, 0x3ff000c0) | (1u << 13));
     b->efuse = m->mmio[(0x3ff5a000 - m->target->peripheral_start) / 4096];
     b->syscon = m->mmio[(0x3ff66000 - m->target->peripheral_start) / 4096];
+    b->dport = m->mmio[(0x3ff00000 - m->target->peripheral_start) / 4096];
+    memset(b->app_ctrl,0,sizeof(b->app_ctrl));b->app_ctrl[0]=1;b->app_ctrl[2]=1;b->app_started=false;b->app_cache=0;
+    mem_register_mmio_range(m, 0x3ff00000, 4096, dport_read, dport_write, b);
     mem_register_mmio_range(m, 0x3ff5a000, 4096, efuse_read, efuse_write, b);
     mem_register_mmio_range(m, 0x3ff66000, 4096, syscon_read, syscon_write, b);
+    for(unsigned group=0;group<2;group++) {
+        uint32_t base=group?0x3ff60000:0x3ff5f000;
+        b->timg[group]=m->mmio[(base-m->target->peripheral_start)/4096];
+        b->timg_ena[group]=mem_read32(m,base+0x98);
+        mem_register_mmio_range(m,base,4096,timg_read,timg_write,b);
+        forward_write(&b->timg[group],base+0x98,b->timg_ena[group]|3);
+    }
     rom_stubs_register_ctx(flexe_session_rom(b->session), 0x40009200, rom_uart, "uart_tx_one_char", b);
     esp32_periph_t *p = flexe_session_periph(b->session);
     for (int channel=0;channel<40;channel++) periph_set_adc_value(p,channel,0);
@@ -134,20 +198,22 @@ int main(int argc, char **argv) {
     mpu_reset(&b);
     for(unsigned i=0;i<16;i++) b.sources[i].gpio=-1;
     flexe_session_config_t config = { .bin_path=argv[1], .elf_path=NULL,
-        .native_freertos=1, .single_core=1, .uart_cb=uart, .uart_ctx=&b, .unhandled_audit=1 };
+        .native_freertos=1, .single_core=0, .uart_cb=uart, .uart_ctx=&b, .unhandled_audit=1 };
     b.session = flexe_session_create(&config);
     if (!b.session) return 3;
     attach(&b);
     unsigned resets = flexe_session_reset_count(b.session);
     char line[2048];
     while (fgets(line, sizeof(line), stdin)) {
-        unsigned dt, adc, powered; char input[513];
-        if (!strchr(line,'\n') || sscanf(line, "%u %f %f %f %f %f %f %u %u %512s", &dt,
-            &b.accel[0], &b.accel[1], &b.accel[2], &b.gyro[0], &b.gyro[1], &b.gyro[2], &adc, &powered, input) != 10 || dt > 20000 || adc > 4095 || powered > 1) break;
+        unsigned dt, adc, powered, arm=0; char input[513];
+        int fields=sscanf(line, "%u %f %f %f %f %f %f %u %u %512s %u", &dt,
+            &b.accel[0], &b.accel[1], &b.accel[2], &b.gyro[0], &b.gyro[1], &b.gyro[2], &adc, &powered, input,&arm);
+        if (!strchr(line,'\n') || fields<10 || dt > 20000 || adc > 4095 || powered > 1 || arm>1) break;
         bool finite = true; for (int i=0;i<3;i++) if (!isfinite(b.accel[i]) || !isfinite(b.gyro[i])) finite=false;
         if (!finite) break;
         if (!b.powered && powered) mpu_reset(&b);
         b.powered = powered;
+        periph_gpio_set_input(flexe_session_periph(b.session),13,(int)arm);
         if (b.adc_channel >= 0) periph_set_adc_value(flexe_session_periph(b.session), b.adc_channel, adc);
         if (strcmp(input,"-")) {
             size_t len = strlen(input); uint8_t bytes[256]; bool valid = len%2==0;
@@ -168,7 +234,7 @@ int main(int argc, char **argv) {
             (unsigned long long)b.transfers,(unsigned long long)b.samples,cpu->halted?"true":"false",(unsigned long long)mem_unmapped_count(flexe_session_mem(b.session)),resets);
         for (int i=0;i<40;i++) fprintf(protocol,"%s%.3f",i?",":"",b.pwm[i]);
         bool reserved_low=true;for(unsigned i=0;i<4;i++){int pin=(int[]){25,26,27,14}[i];if(!periph_gpio_output_enabled(flexe_session_periph(b.session),pin)||periph_gpio_pin_level(flexe_session_periph(b.session),pin)) reserved_low=false;}
-        fprintf(protocol,"],\"reserved_gpio_outputs_low\":%s,\"unhandled\":%d,\"uart_hex\":\"",reserved_low?"true":"false",periph_unhandled_count(flexe_session_periph(b.session))); for(size_t i=0;i<b.uart_len;i++) fprintf(protocol,"%02x",b.uart[i]);
+        fprintf(protocol,"],\"gate_gpio32\":%d,\"loop_gpio33\":%d,\"app_cpu_started\":%s,\"reserved_gpio_outputs_low\":%s,\"unhandled\":%d,\"uart_hex\":\"",periph_gpio_pin_level(flexe_session_periph(b.session),32),periph_gpio_pin_level(flexe_session_periph(b.session),33),b.app_started?"true":"false",reserved_low?"true":"false",periph_unhandled_count(flexe_session_periph(b.session))); for(size_t i=0;i<b.uart_len;i++) fprintf(protocol,"%02x",b.uart[i]);
         fprintf(protocol,"\"}\n");fflush(protocol);b.uart_len=0;
     }
     flexe_session_destroy(b.session);fclose(protocol);return 0;

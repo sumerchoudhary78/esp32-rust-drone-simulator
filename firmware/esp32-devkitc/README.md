@@ -1,19 +1,36 @@
-# ESP32-DevKitC-32E Rust firmware · milestone 1
+# ESP32-DevKitC-32E Rust firmware
 
 **Target:** Espressif **ESP32-DevKitC-32E**, ESP32-WROOM-32E module, classic
 ESP32 ECO3, 4 MiB flash, `xtensa-esp32-none-elf`. A generic ESP32-S3/C3 DevKit is
 not this target. Board reference:
 [Espressif DevKitC guide](https://docs.espressif.com/projects/esp-dev-kits/en/latest/esp32/esp32-devkitc/user_guide.html).
 
-This milestone is a **flashable boot-only program**: serial identity and 1 Hz
-heartbeat, with GPIO25/26/27/14 held at static LOW after application initialization.
-It configures no PWM, Wi-Fi, IMU, ADC or flight loop. The shared Rust controller
-receives no fabricated sensor samples and remains uncalibrated. It cannot arm.
+Two physical build targets are available:
 
-Cross-build, merged-image integrity checks and emulated application startup are
-verified. **Physical flash/boot and pad waveforms have not been measured.** A
-software output-register check cannot establish pin voltage during reset or
-boot ROM execution. This is not flight-ready firmware.
+- **Flight-controller bench:** actual 500 Hz MPU6050/fusion/PID/mixer loop on
+  Core 1, ADC1 battery sensing, four gated LEDC outputs, physical arming input,
+  calibrated voltage policy, 250 ms authenticated command expiry, independent
+  timer inhibition and a hardware MWDT reset fallback. Optional WPA2 AP/UDP and
+  UART run on Core 0. See the [complete physical bench guide](../../docs/physical-bench.md)
+  and [packet contract](../../docs/firmware-protocol.md).
+- **Milestone-1 bootstrap:** retained as the default `build`/`flash` target. It
+  prints a heartbeat and holds motor pins LOW without configuring peripherals.
+
+Physical UART/Wi-Fi images cross-build and the real dual-core UART controller
+runs against emulated MPU6050, ADC, ESC PWM and GPIOs. **No physical board has
+been flashed or measured.** Bench outputs default to a 1150 µs cap and require
+an external gate plus measured ADC calibration before arming. Current gains,
+ESC compatibility, pad voltages and real-time behavior remain unqualified.
+
+```sh
+python3 scripts/esp32_firmware.py init-profile
+python3 scripts/esp32_firmware.py build-bench --profile output/firmware-config/device.json
+python3 scripts/esp32_firmware.py build-bench --profile output/firmware-config/device.json --wifi
+python3 scripts/esp32_firmware.py build-bench --emulated --fault-injection
+```
+
+Setup below is common to both. The subsequent `build`/`flash` examples refer to
+the motor-inhibited bootstrap; use the linked bench guide for the controller.
 
 ## Setup and build
 
@@ -57,7 +74,7 @@ python3 scripts/esp32_firmware.py flash --port /dev/ttyUSB0
 # macOS often uses a /dev/cu.usbserial-* or /dev/cu.SLAB_USBtoUART port.
 ```
 
-Only `flash --port ...` opens/writes hardware. Setup, build, tests and emulator
+Only explicit `flash`, `flash-bench` and bench-console transport commands access hardware. Setup, build, tests and emulator
 setup do not. The helper rechecks images, retains espflash's chip/revision checks,
 flashes the ELF and opens a **115200 baud** monitor. It does not auto-select a
 serial device or bypass compatibility checks.
@@ -65,7 +82,7 @@ serial device or bypass compatibility checks.
 Expected output includes:
 
 ```text
-AEROLAB firmware 0.1.0-m1 milestone=1 mode=boot_only
+AEROLAB firmware 0.2.0 milestone=1 mode=boot_only
 board=ESP32-DevKitC-32E chip=esp32 configured_flash_bytes=4194304 cpu_mhz=240 uart_baud=115200
 reserved_motor_gpios=[25, 26, 27, 14] signal=static_low pwm=disabled
 imu=unavailable battery=unavailable wifi=disabled stabilization=not_running flight_ready=false
@@ -95,10 +112,10 @@ ADC and LEDC register accesses against the virtual devices. UART `0/5/7` selects
 1000/1500/1700 µs for all motors. UART `r` selects ±16 g / ±2000°/s for range experiments. It intentionally has no flight controller,
 arming gate or flight failsafe. It is never selected by the flash helper.
 
-## Next milestone
+## Physical qualification still required
 
-Implement a physical MPU6050 driver and real ESC driver behind disabled motor
-outputs; verify identity/configuration, axis signs, freshness and output timing
-with propellers removed. Calibration, calibrated battery sensing, command expiry,
-Wi-Fi scheduling and an independent output watchdog remain separate hardware
-gates. See [the staged roadmap](../../ROADMAP.md).
+Follow the [bench measurement sequence](../../docs/physical-bench.md), preserve
+raw traces in a [hardware report](../../docs/bench-report-template.md), then
+measure and retune the actual vehicle before restrained tests. Firmware and
+emulated fault coverage do not establish flight readiness. See the
+[staged roadmap](../../ROADMAP.md).

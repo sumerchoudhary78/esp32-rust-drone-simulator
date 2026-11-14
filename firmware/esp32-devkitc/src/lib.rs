@@ -2,6 +2,14 @@
 //! Milestone 1 boot diagnostics. No sensor data or flight commands are invented.
 //! The GPIO driver in main independently holds every reserved motor pin LOW.
 use flight_core::{FlightController, motors::MotorOutputs, safety::FlightState};
+pub mod battery;
+pub mod commands;
+pub mod controller;
+pub mod imu;
+pub mod mailbox;
+pub mod profile {
+    include!(concat!(env!("OUT_DIR"), "/bench_profile.rs"));
+}
 
 pub const BOARD: &str = "ESP32-DevKitC-32E";
 pub const CHIP: &str = "esp32";

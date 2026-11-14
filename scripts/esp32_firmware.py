@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Pinned tools and build/flash commands for the single milestone-1 board.
+"""Pinned tools and build/flash commands for ESP32-DevKitC-32E.
 
-Default operations never access a serial port. Only `flash --port ...` writes
+Default operations never access a serial port. Only `flash` / `flash-bench --port ...` write
 hardware. espup installs a dedicated toolchain without replacing stable or esp.
 """
 import argparse
@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import platform
 import shutil
+import secrets
 import subprocess
 import sys
 import urllib.request
@@ -115,7 +116,7 @@ def build():
     shutil.copyfile(FIRMWARE / "target" / TARGET / "release" / NAME, elf)
     image = OUTPUT / f"{NAME}-merged.bin"
     run([espflash, "save-image", "--chip", "esp32", "--flash-size", "4mb", "--flash-mode", "dio", "--flash-freq", "40mhz", "--merge", "--skip-padding", "--skip-update-check", elf, image])
-    run([sys.executable, ROOT / "scripts/verify_esp32_image.py", "--elf", elf, "--image", image, "--manifest", OUTPUT / "manifest.json"])
+    run([sys.executable, ROOT / "scripts/verify_esp32_image.py", "--elf", elf, "--image", image, "--manifest", OUTPUT / "manifest.json", "--firmware-kind", "boot-only"])
     with (OUTPUT / "SHA256SUMS").open("w") as checksums:
         for file in [elf, image, OUTPUT / "manifest.json"]:
             checksums.write(f"{digest(file)}  {file.name}\n")
@@ -134,14 +135,17 @@ def build_fixture():
     print(f"SIMULATION ONLY peripheral fixture (not flight firmware): {output}")
 
 
-def host_tests():
+def host_check(action="test"):
     cargo = rustup_which("stable", "cargo")
     rustc = rustup_which("stable", "rustc")
     host = next(line.split(": ", 1)[1] for line in subprocess.check_output([rustc, "-vV"], text=True).splitlines() if line.startswith("host: "))
     env = os.environ.copy()
     env["RUSTC"] = rustc
     # Root cwd intentionally avoids the firmware's Xtensa build-std config.
-    run([cargo, "test", "--manifest-path", FIRMWARE / "Cargo.toml", "--no-default-features", "--lib", "--tests", "--target", host, "--locked"], cwd=ROOT, env=env)
+    arguments = [cargo, action, "--manifest-path", FIRMWARE / "Cargo.toml", "--no-default-features", "--lib", "--tests", "--target", host, "--locked"]
+    if action == "clippy":
+        arguments += ["--", "-D", "warnings"]
+    run(arguments, cwd=ROOT, env=env)
 
 
 def flash(port):
@@ -155,24 +159,122 @@ def flash(port):
     run([espflash, "flash", "--chip", "esp32", "--port", port, "--flash-size", "4mb", "--flash-mode", "dio", "--flash-freq", "40mhz", "--monitor", "--monitor-baud", "115200", "--skip-update-check", elf])
 
 
+
+def init_profile(path):
+    """Create a private, uncalibrated physical bench profile, never a shared key."""
+    path = path.resolve()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    profile = dict(version=1, mode="bench", psk_hex=secrets.token_hex(32),
+        max_pwm_us=1150, esc_hz=50, battery_calibration=None,
+        wifi_ssid="Aerolab-ESP32", wifi_password=secrets.token_urlsafe(18))
+    # Exclusive creation prevents silently changing the key of an existing board.
+    with open(path, "x", opener=lambda name, flags: os.open(name, flags, 0o600)) as file:
+        json.dump(profile, file, indent=2)
+        file.write("\n")
+    print(f"Created private profile: {path} (battery calibration missing; arming inhibited)")
+
+
+def build_bench(profile_path, emulated=False, wifi=False, faults=False):
+    from verify_esp32_image import verify, watchdog_iram_address
+    profile_path = (FIRMWARE / "profiles/emulated.json" if emulated else profile_path).resolve()
+    profile = json.loads(profile_path.read_text())
+    if emulated != (profile.get("mode") == "emulated"):
+        raise SystemExit("Use --emulated for the simulation profile; it is not flashable.")
+    if wifi and emulated:
+        raise SystemExit("The emulator does not model the Wi-Fi RF hardware.")
+    suffix = "-emulated" if emulated else "-wifi" if wifi else ""
+    output = ROOT / ("output/firmware/flight-bench" + suffix)
+    features = ["bench-wifi" if wifi else "bench-firmware"]
+    if faults:
+        features.append("bench-fault-injection")
+    previous = os.environ.get("AEROLAB_BENCH_PROFILE")
+    os.environ["AEROLAB_BENCH_PROFILE"] = str(profile_path)
+    name = "aerolab-flight-bench"
+    try:
+        firmware_command(["build", "--release", "--locked", "--features", ",".join(features), "--bin", name])
+    finally:
+        if previous is None:
+            os.environ.pop("AEROLAB_BENCH_PROFILE", None)
+        else:
+            os.environ["AEROLAB_BENCH_PROFILE"] = previous
+    output.mkdir(parents=True, exist_ok=True)
+    elf = output / f"{name}.elf"
+    shutil.copyfile(FIRMWARE / "target" / TARGET / "release" / name, elf)
+    _, _, espflash, _ = build_environment()
+    common = [espflash, "save-image", "--chip", "esp32", "--flash-size", "4mb", "--flash-mode", "dio", "--flash-freq", "40mhz", "--skip-update-check"]
+    image = output / f"{name}-merged.bin"
+    app = output / f"{name}.bin"
+    run([*common, "--merge", "--skip-padding", elf, image])
+    run([*common, elf, app])
+    manifest = verify(elf.read_bytes(), image.read_bytes())
+    watchdog_address = watchdog_iram_address(elf.read_bytes())
+    manifest.update(milestone=2, mode=profile["mode"], transport="wifi_udp_and_uart" if wifi else "uart",
+        flight_qualified=False, physical_bench_validated=False, fault_injection=faults,
+        watchdog_handler_address=hex(watchdog_address), watchdog_in_iram=True,
+        loop_hz=500, esc_hz=profile["esc_hz"], max_pwm_us=profile["max_pwm_us"],
+        battery_calibrated=profile.get("battery_calibration") is not None,
+        profile_sha256=digest(profile_path),
+        motor_policy="GPIO32 hardware gate required; disarmed gate LOW; armed LEDC signals on GPIO25/26/27/14",
+        motor_policy_source="firmware/esp32-devkitc/src/bench.rs; hardware measurement pending",
+        sha256={file.name:digest(file) for file in [elf,image,app]})
+    (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    with (output / "SHA256SUMS").open("w") as checksums:
+        for file in [elf,image,app,output / "manifest.json"]:
+            checksums.write(f"{digest(file)}  {file.name}\n")
+    print(f"{'SIMULATION ONLY' if emulated else 'Physical bench — NOT flight qualified'} artifacts: {output}")
+
+
+def flash_bench(port, folder, allow_faults=False, experimental=False):
+    from verify_esp32_image import verify
+    folder = folder.resolve()
+    manifest = json.loads((folder / "manifest.json").read_text())
+    if manifest.get("milestone") != 2 or manifest.get("mode") not in ["bench", "experimental_flight"]:
+        raise SystemExit("Refusing to flash an emulated, unknown or non-bench image.")
+    if manifest.get("fault_injection") and not allow_faults:
+        raise SystemExit("Fault-injection image: use --allow-fault-injection only on a propellers-removed bench.")
+    if manifest["mode"] == "experimental_flight" and not experimental:
+        raise SystemExit("Full-range, unqualified image: requires --experimental-flight and completed physical qualification.")
+    elf = folder / "aerolab-flight-bench.elf"
+    image = folder / "aerolab-flight-bench-merged.bin"
+    for file in [elf, image]:
+        if digest(file) != manifest["sha256"][file.name]:
+            raise SystemExit("Artifact hash differs from its build manifest; rebuild before flashing.")
+    verify(elf.read_bytes(), image.read_bytes())
+    _, _, espflash, _ = build_environment()
+    run([espflash, "flash", "--chip", "esp32", "--port", port, "--flash-size", "4mb", "--flash-mode", "dio", "--flash-freq", "40mhz", "--monitor", "--monitor-baud", "115200", "--skip-update-check", elf])
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
-    for name in ["setup", "build", "build-fixture", "test"]:
+    for name in ["setup", "build", "build-fixture", "test", "lint"]:
         commands.add_parser(name)
-    flash_parser = commands.add_parser("flash", help="Write the boot-only firmware to the explicitly named board port")
+    initial = commands.add_parser("init-profile", help="Generate private command/WPA2 keys; ADC remains uncalibrated")
+    initial.add_argument("--output", type=Path, default=ROOT / "output/firmware-config/device.json")
+    bench = commands.add_parser("build-bench", help="Build actual MPU6050 / ESC / watchdog firmware")
+    choice = bench.add_mutually_exclusive_group(required=True)
+    choice.add_argument("--profile", type=Path)
+    choice.add_argument("--emulated", action="store_true")
+    bench.add_argument("--wifi", action="store_true")
+    bench.add_argument("--fault-injection", action="store_true")
+    flash_parser = commands.add_parser("flash", help="Write the boot-only image to the named port")
     flash_parser.add_argument("--port", required=True)
+    physical = commands.add_parser("flash-bench", help="Write a physical bench image to the named port")
+    physical.add_argument("--port", required=True)
+    physical.add_argument("--artifacts", type=Path, default=ROOT / "output/firmware/flight-bench")
+    physical.add_argument("--props-removed", action="store_true", required=True)
+    physical.add_argument("--allow-fault-injection", action="store_true")
+    physical.add_argument("--experimental-flight", action="store_true")
     args = parser.parse_args()
-    if args.command == "setup":
-        setup()
-    elif args.command == "build":
-        build()
-    elif args.command == "test":
-        host_tests()
-    elif args.command == "build-fixture":
-        build_fixture()
-    else:
-        flash(args.port)
+    if args.command == "setup": setup()
+    elif args.command == "build": build()
+    elif args.command == "test": host_check()
+    elif args.command == "lint": host_check("clippy")
+    elif args.command == "build-fixture": build_fixture()
+    elif args.command == "init-profile": init_profile(args.output)
+    elif args.command == "build-bench": build_bench(args.profile, args.emulated, args.wifi, args.fault_injection)
+    elif args.command == "flash-bench": flash_bench(args.port, args.artifacts, args.allow_fault_injection, args.experimental_flight)
+    else: flash(args.port)
 
 
 if __name__ == "__main__":

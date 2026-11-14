@@ -82,3 +82,50 @@ No physical board was flashed or measured. The earlier Android result above is
 retained historical evidence; the native Android app was not rerun for this
 follow-up. Independent aircraft motor inhibition, physical sensor/ADC/ESC
 qualification, real-time measurements and restrained flights remain open.
+
+## Physical controller software · 15 November 2026
+
+The ESP32-DevKitC-32E bench controller now has actual hardware drivers and a
+separate flight core. Local automated results for this implementation:
+
+| Check | Result |
+| --- | --- |
+| Root Rust controller, scenarios and device graph | 32 passed |
+| Firmware policy, HMAC/replay, mailbox, calibration, ADC and MPU driver tests | 22 passed |
+| Python tooling, image integrity and actual Xtensa guest tests | 18 passed (7 exercise/inspect the real bench binary) |
+| Live HTTP/WebSocket regressions | 7 passed |
+| Browser flight and complete device-workbench regressions | 11 passed |
+| Root/firmware formatting and warnings-denied Clippy | Passed |
+| Firmware cross-build/package | Physical UART, WPA2/DHCP/UDP + UART, emulated fault-injection controller, retained bootstrap and SIM fixture passed |
+
+These are **90 automated checks**, not physical test results. The actual bench
+binary executes both ESP32 cores, configures/reads MPU6050 at ±8 g / ±2000°/s,
+acquires ADC1 voltage, completes 2000 stationary/bias samples, enforces the
+physical switch/authenticated arming sequence, runs PID/mixing, and produces
+capped LEDC outputs. Tests inject signed Python packets through its real UART
+parser, reject corruption/replays, and verify command/sensor/battery/interlock
+cuts and inhibited sensor recovery.
+
+A deliberate Core 1 busy-loop stall leaves Core 0 running. The guest TIMG1
+priority-3 ISR independently lowers GPIO32 and disables all four motor pads.
+Tests observe the cut within a 14.02 ms **guest-clock sampling bound**, and
+verify that further arm packets cannot re-enable the pads. The linked ISR and
+its literal pool were inspected in IRAM without flash calls. Packaging now
+checks the actual ISR symbol address, records it in the manifest, and rejects
+flash placement; a regression mutates that address to verify rejection.
+
+The native adapter models the classic DPORT APP boot/cache handoff, source-status
+mirrors, and TIMG interrupt/prescaler quirks needed by esp-hal. The compiled
+firmware makes all control and watchdog decisions. ELF symbols are inspected
+only by the offline packaging check, not used to hook firmware execution.
+
+**No physical hardware was connected, flashed or actuated.** GPIO voltages,
+actual pulse widths, mounting/mixer signs, calibrated ADC residuals, RF/DHCP,
+loop jitter under radio load, MWDT reset, brownout behavior, downstream ESC stop
+time and flight gains remain unmeasured. Classic-ESP32 MWDT elapsed/reset behavior
+is not modeled by this backend; its register configuration and compiled reset
+path do not prove a reset response. The current default is capped bench firmware,
+not flight-qualified firmware. The [bench guide](physical-bench.md) and
+[blank measurement report](bench-report-template.md) define the remaining work.
+Android's earlier result remains historical; the Slint app was not rerun or
+converted to AERO v2 in this change.

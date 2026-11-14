@@ -147,6 +147,7 @@ network.
 cargo test --workspace --locked
 python3 scripts/esp32_firmware.py build
 python3 scripts/esp32_firmware.py build-fixture
+python3 scripts/esp32_firmware.py build-bench --emulated --fault-injection
 python3 -m unittest discover -s tests -p '*_test.py' -v
 npm ci
 AEROLAB_REQUIRE_EMULATOR=1 npx playwright test tests/browser/workbench.spec.mjs
@@ -157,3 +158,20 @@ read MPU/ADC data, change motor pulses with UART, and check wrong pins, wrong
 I²C address and sensor power loss. Browser checks assemble all 13 devices from
 empty, wire them, reject a power short, export a circuit and run uploaded ELF
 through to the motor model. They do not establish physical flight readiness.
+
+
+## Actual flight-controller binary
+
+The [bench controller](physical-bench.md) now runs on both virtual ESP32 cores
+with real MPU6050/HAL, ADC, calibration, fusion/PID, LEDC and authenticated UART.
+`tests/flight_bench_test.py` supplies GPIO13 arming and signed AERO v2 frames to
+the native backend and observes GPIO32 plus the motor pads. It also stalls Core 1
+to verify TIMG1 interrupt-driven pad inhibition while Core 0 continues.
+
+The adapter models classic-ESP32 DPORT boot/cache handoff and TIMG T0/T1
+interrupt/prescaler quirks needed by esp-hal. Core 1 executes actual instructions;
+there are no ELF symbol hooks or host substitutes for control/watchdog decisions.
+The classic MWDT reset fallback and RF remain physical qualification items.
+The browser workbench currently provides neither a GPIO13 switch control nor an
+AERO v2 packet generator; use the native test harness for this binary. The older
+SIM-only fixture remains the interactive UART `0/5/7` workbench example.

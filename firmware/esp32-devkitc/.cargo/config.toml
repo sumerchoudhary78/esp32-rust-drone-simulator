@@ -5,4 +5,4 @@ target = "xtensa-esp32-none-elf"
 rustflags = ["-C", "link-arg=-nostartfiles"]
 
 [unstable]
-build-std = ["core"]
+build-std = ["core", "alloc"]

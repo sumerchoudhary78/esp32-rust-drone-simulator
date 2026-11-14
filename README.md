@@ -3,9 +3,10 @@
 [![CI](https://github.com/sumerchoudhary78/esp32-rust-drone-simulator/actions/workflows/ci.yml/badge.svg)](https://github.com/sumerchoudhary78/esp32-rust-drone-simulator/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-**Aerolab** is an open-source 3D quadcopter simulator for learning ESP32 drone
-flight control in Rust. Experiment with MPU6050 sensor fusion, PID stabilization,
-motor mixing and Wi-Fi failsafes before buying or connecting hardware.
+**Aerolab** combines ESP32 Rust flight-controller bench firmware with a 3D
+quadcopter and electronics simulator. Develop MPU6050 sensor fusion, PID
+stabilization, motor mixing and Wi-Fi failsafes, then test the compiled firmware
+against virtual devices before connecting hardware.
 
 Run the simulation on your computer and fly from a browser or the optional
 Rust + Slint Android controller. No ESP32 board, Pixhawk, battery or motors are
@@ -13,15 +14,18 @@ required for the virtual setup.
 
 **Current stage:** a browser flight lab, an interactive electronics workbench,
 and optional classic-ESP32 CPU co-simulation for your compiled firmware.
-A flashable, motor-inhibited Rust bootstrap targets one exact ESP32 board.
-Physical bench/flight qualification remains pending.
+Real flight-controller bench firmware now targets **ESP32-DevKitC-32E**:
+MPU6050, 500 Hz stabilization, battery sensing, four gated ESC outputs,
+authenticated UART/Wi-Fi and independent watchdog paths. The default cap is
+1150 µs; physical bench measurements and flight qualification remain pending.
 
 ![ESP32 Rust drone simulator showing the 3D quadcopter, live MPU6050 attitude telemetry, pilot controls and motor PWM outputs](docs/images/esp32-rust-drone-simulator-flight-deck.png)
 
 [Quickstart](#quickstart) · [Features](#what-is-implemented) ·
 [Architecture](#architecture) · [Roadmap](ROADMAP.md) ·
 [Device workbench](docs/device-workbench.md) ·
-[ESP32 firmware](firmware/esp32-devkitc/README.md) ·
+[Physical bench firmware](docs/physical-bench.md) ·
+[ESP32 toolchain](firmware/esp32-devkitc/README.md) ·
 [Contributing](CONTRIBUTING.md) ·
 [Report a bug](https://github.com/sumerchoudhary78/esp32-rust-drone-simulator/issues/new/choose)
 
@@ -73,6 +77,27 @@ dependencies. The simulator itself needs only the Rust build.
 controller, losing commands or hiding its tab expires the 500 ms watchdog.
 After returning to a hidden tab, select **Resume controls · disarm motors**.
 Export data downloads up to the latest 6,000 browser-captured snapshots as CSV.
+
+## Build the physical controller or test it virtually
+
+The hardware implementation is separate from the browser simulator. Start with
+its [wiring, calibration and bench guide](docs/physical-bench.md):
+
+```sh
+python3 scripts/esp32_firmware.py setup
+python3 scripts/esp32_firmware.py init-profile
+python3 scripts/esp32_firmware.py build-bench --profile output/firmware-config/device.json --wifi
+# No hardware needed: run the same controller/HAL on emulated ESP32 cores.
+python3 scripts/esp32_firmware.py build-bench --emulated --fault-injection
+python3 scripts/setup_emulator.py
+AEROLAB_REQUIRE_EMULATOR=1 python3 -m unittest discover -s tests -p 'flight_bench_test.py' -v
+```
+
+The private physical profile starts without ADC calibration, so it cannot arm.
+Never flash the public emulated profile. Real use requires the documented output
+gate, measured battery calibration and propellers-removed qualification.
+The [physical packet protocol](docs/firmware-protocol.md) differs from the
+simulator's WebSocket controls. Current software is not flight-qualified.
 
 ## Phone / Android
 
@@ -128,7 +153,7 @@ MPU6050 I²C, ADC1 and LEDC PWM are connected to the applied assembly. Guest Wi-
 DShot, electrical transients and cycle-accurate timing are outside this adapter.
 See [setup, wiring, example firmware and compatibility limits](docs/device-workbench.md).
 
-## Flashable Rust firmware: milestone 1
+## Retained boot-only diagnostic: milestone 1
 
 Exact board: **ESP32-DevKitC-32E / ESP32-WROOM-32E, ECO3, 4 MiB**.
 
@@ -164,7 +189,7 @@ contains no flight stabilization, and is never selected by the flash helper.
 | Safety      | Zero-throttle/level/voltage arm gates; latched motor cut for 500 ms command expiry, IMU failure, critical voltage, >70° tilt, host scheduling overrun and emergency stop |
 | Flight deck | Interactive 3D orbit/top/follow, touch/keyboard controls, attitude plot, ESC bars, hardware map, PID/environment settings, 40-event log, CSV export                      |
 | Workbench   | 13 draggable/wireable devices, 38-pin board, net validation, import/export, applied connectivity and live device state                                                   |
-| Firmware    | Optional actual LX6 guest execution, MPU6050 I²C, ADC1, UART0, LEDC PWM; boot-only physical-board image and simulation-only peripheral example                           |
+| Firmware    | Dual-core ESP32 bench controller, MPU6050/ADC/LEDC, WPA2/UDP/UART, interlocks/watchdogs; physical qualification pending                           |
 | Ownership   | One controller and any observers; takeover disarms; invalid or replayed commands never refresh the watchdog                                                              |
 
 ## Architecture
