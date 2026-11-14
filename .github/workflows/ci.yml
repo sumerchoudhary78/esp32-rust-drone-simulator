@@ -68,6 +68,8 @@ jobs:
       - name: Install stable Rust for the host
         run: rustup toolchain install stable --profile minimal && rustup default stable
       - name: Install pinned Xtensa tools
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: python3 scripts/esp32_firmware.py setup
       - name: Check boot-only behavior and build flash artifacts
         run: |
